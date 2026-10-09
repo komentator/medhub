@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata" id="root" xmlns="http://www.w3.org/1999/xhtml" />
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <data name="AppTitle" xml:space="preserve"><value>MedControl</value></data>
+  <data name="NoReminders" xml:space="preserve"><value>Активных напоминаний нет</value></data>
+  <data name="NewMeasurement" xml:space="preserve"><value>Новое измерение</value></data>
+  <data name="ShowMeasurements" xml:space="preserve"><value>Показать измерения</value></data>
+  <data name="Taken" xml:space="preserve"><value>Принял</value></data>
+  <data name="Snooze15" xml:space="preserve"><value>Отложить 15 минут</value></data>
+  <data name="CheckDatabase" xml:space="preserve"><value>Проверить базу данных</value></data>
+  <data name="DeleteAllData" xml:space="preserve"><value>Удалить все данные</value></data>
+  <data name="OpenReportsFolder" xml:space="preserve"><value>Открыть папку отчётов</value></data>
+</root>

@@ -1,0 +1,272 @@
+<Window x:Class="MedControl.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+        Title="MedControl" Height="760" Width="1100" Icon="/Resources/app.ico">
+    <Grid>
+        <TabControl x:Name="Tabs">
+            <TabItem Header="Главная">
+                <ScrollViewer><StackPanel Margin="10">
+                    <TextBlock Text="Ближайшие приёмы сегодня:" FontWeight="Bold"/>
+                    <TextBox x:Name="TodayBox" IsReadOnly="True" AcceptsReturn="True" Height="120" TextWrapping="Wrap"/>
+                    <WrapPanel>
+                        <Button Content="Новое измерение" Click="OnNewMeasurement"/>
+                        <Button Content="Показать измерения" Click="OnGotoMeasurements"/>
+                        <Button Content="Оценить самочувствие" Click="OnNewWellBeing"/>
+                        <Button Content="Внеплановый приём" Click="OnUnplanned"/>
+                        <Button Content="Печать" Click="OnQuickPrint"/>
+                        <ComboBox x:Name="PeriodBox" Width="140" Margin="4" SelectionChanged="OnPeriodChanged">
+                            <ComboBoxItem Content="7 дней" Tag="7"/>
+                            <ComboBoxItem Content="30 дней" Tag="30" IsSelected="True"/>
+                            <ComboBoxItem Content="3 месяца" Tag="90"/>
+                            <ComboBoxItem Content="1 год" Tag="365"/>
+                            <ComboBoxItem Content="Всё время" Tag="36500"/>
+                        </ComboBox>
+                    </WrapPanel>
+                    <TextBlock x:Name="StatsBox" TextWrapping="Wrap" Margin="0,6"/>
+                    <TextBlock Text="Верхнее давление"/>
+                    <lvc:CartesianChart x:Name="SysChart" Height="150"/>
+                    <TextBlock Text="Нижнее давление"/>
+                    <lvc:CartesianChart x:Name="DiaChart" Height="150"/>
+                    <TextBlock Text="Пульс"/>
+                    <lvc:CartesianChart x:Name="PulseChart" Height="150"/>
+                    <TextBlock Text="Самочувствие"/>
+                    <lvc:CartesianChart x:Name="WbChart" Height="150"/>
+                </StackPanel></ScrollViewer>
+            </TabItem>
+            <TabItem Header="Измерения">
+                <DockPanel>
+                    <WrapPanel DockPanel.Dock="Top">
+                        <Button Content="Новое" Click="OnNewMeasurement"/>
+                        <Button Content="Историческое" Click="OnNewHistoricMeasurement"/>
+                        <Button Content="Редактировать" Click="OnEditMeasurement"/>
+                        <Button Content="Удалить" Click="OnDeleteMeasurement"/>
+                        <TextBox x:Name="MeasSearch" Width="200" ToolTip="Поиск по тонометру"/>
+                        <Button Content="Найти" Click="OnRefreshMeas"/>
+                    </WrapPanel>
+                    <DataGrid x:Name="MeasGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" MouseDoubleClick="OnMeasDetails">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Дата" Binding="{Binding Date}"/>
+                            <DataGridTextColumn Header="Время" Binding="{Binding Time}"/>
+                            <DataGridTextColumn Header="Тонометр" Binding="{Binding Tonometer}"/>
+                            <DataGridTextColumn Header="Верхнее" Binding="{Binding Sys}"/>
+                            <DataGridTextColumn Header="Нижнее" Binding="{Binding Dia}"/>
+                            <DataGridTextColumn Header="Пульс" Binding="{Binding Pulse}"/>
+                            <DataGridTextColumn Header="Самочувствие" Binding="{Binding Wb}"/>
+                            <DataGridTextColumn Header="Комментарий" Binding="{Binding Comment}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+            <TabItem Header="Лекарства">
+                <DockPanel>
+                    <WrapPanel DockPanel.Dock="Top">
+                        <Button Content="Добавить" Click="OnAddMed"/>
+                        <Button Content="Изменить" Click="OnEditMed"/>
+                        <Button Content="Отключить/Включить" Click="OnToggleMed"/>
+                        <Button Content="Удалить" Click="OnDeleteMed"/>
+                        <Button Content="Массовый ввод" Click="OnBulkDoses"/>
+                    </WrapPanel>
+                    <DataGrid x:Name="MedsGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Название" Binding="{Binding Name}"/>
+                            <DataGridTextColumn Header="Активно" Binding="{Binding Active}"/>
+                            <DataGridTextColumn Header="Режим" Binding="{Binding Mode}"/>
+                            <DataGridTextColumn Header="Время/дозы" Binding="{Binding Doses}" Width="*"/>
+                            <DataGridTextColumn Header="Фото" Binding="{Binding Photo}"/>
+                            <DataGridTextColumn Header="Инструкция" Binding="{Binding Instr}"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+            <TabItem Header="Приёмы">
+                <DockPanel>
+                    <WrapPanel DockPanel.Dock="Top">
+                        <ComboBox x:Name="IntakeStatusBox" Width="180" SelectionChanged="OnRefreshIntakes">
+                            <ComboBoxItem Content="Все" IsSelected="True"/>
+                            <ComboBoxItem Content="Принял"/>
+                            <ComboBoxItem Content="Принял позже"/>
+                            <ComboBoxItem Content="Пропущено"/>
+                            <ComboBoxItem Content="Внеплановый приём"/>
+                        </ComboBox>
+                        <TextBox x:Name="IntakeSearch" Width="200" ToolTip="Поиск по лекарству"/>
+                        <Button Content="Обновить" Click="OnRefreshIntakes"/>
+                        <Button Content="Принял позже" Click="OnTakenLate"/>
+                        <Button Content="Подробнее" Click="OnIntakeDetails"/>
+                        <Button Content="Комментарий" Click="OnIntakeComment"/>
+                        <Button Content="Удалить" Click="OnDeleteIntake"/>
+                    </WrapPanel>
+                    <DataGrid x:Name="IntakesGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" MouseDoubleClick="OnIntakeDetails">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="План" Binding="{Binding Scheduled}"/>
+                            <DataGridTextColumn Header="Факт" Binding="{Binding Actual}"/>
+                            <DataGridTextColumn Header="Событие" Binding="{Binding Summary}" Width="*"/>
+                            <DataGridTextColumn Header="Статус" Binding="{Binding Status}"/>
+                            <DataGridTextColumn Header="Способ" Binding="{Binding Method}"/>
+                            <DataGridTextColumn Header="Самочувствие" Binding="{Binding Wb}"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+            <TabItem Header="Самочувствие">
+                <DockPanel>
+                    <WrapPanel DockPanel.Dock="Top">
+                        <Button Content="Оценить" Click="OnNewWellBeing"/>
+                        <Button Content="Изменить" Click="OnEditWellBeing"/>
+                        <Button Content="Удалить" Click="OnDeleteWellBeing"/>
+                        <Button Content="Обновить" Click="OnRefreshWb"/>
+                    </WrapPanel>
+                    <DataGrid x:Name="WbGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Дата" Binding="{Binding Date}"/>
+                            <DataGridTextColumn Header="Оценка" Binding="{Binding Score}"/>
+                            <DataGridTextColumn Header="Комментарий" Binding="{Binding Comment}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+            <TabItem Header="Инструкции">
+                <DockPanel>
+                    <WrapPanel DockPanel.Dock="Top">
+                        <Button Content="Показать" Click="OnShowInstruction"/>
+                        <Button Content="Обновить" Click="OnRefreshInstructions"/>
+                    </WrapPanel>
+                    <DataGrid x:Name="InstrGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" MouseDoubleClick="OnShowInstruction">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Лекарство" Binding="{Binding Name}"/>
+                            <DataGridTextColumn Header="Текст" Binding="{Binding HasText}"/>
+                            <DataGridTextColumn Header="Фото" Binding="{Binding HasPhoto}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+            <TabItem Header="Синхронизация">
+                <ScrollViewer><StackPanel Margin="10">
+                    <TextBlock Text="Этот компьютер" FontWeight="Bold"/>
+                    <TextBlock x:Name="DeviceIdBox" TextWrapping="Wrap"/>
+                    <WrapPanel>
+                        <TextBlock Text="Имя: " VerticalAlignment="Center"/>
+                        <TextBox x:Name="DeviceNameBox" Width="220"/>
+                    </WrapPanel>
+                    <CheckBox x:Name="SyncServerBox" Content="Включить сервер (этот ПК принимает подключения)"/>
+                    <WrapPanel>
+                        <TextBlock Text="Порт: " VerticalAlignment="Center"/>
+                        <TextBox x:Name="SyncPortBox" Width="100"/>
+                        <TextBlock Text="Ключ (одинаковый на обоих ПК): " VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        <PasswordBox x:Name="SyncKeyBox" Width="200"/>
+                    </WrapPanel>
+                    <TextBlock Text="Второй компьютер" FontWeight="Bold" Margin="0,10,0,0"/>
+                    <WrapPanel>
+                        <TextBlock Text="IP-адрес: " VerticalAlignment="Center"/>
+                        <TextBox x:Name="PeerIpBox" Width="180"/>
+                        <Button Content="Проверить связь" Click="OnSyncTest"/>
+                        <Button Content="Синхронизировать" Click="OnSyncNow"/>
+                    </WrapPanel>
+                    <WrapPanel>
+                        <Button Content="Разрешить в брандмауэре" Click="OnFirewallAllow"/>
+                    </WrapPanel>
+                    <TextBlock x:Name="SyncStatus" TextWrapping="Wrap" Margin="0,6"/>
+                    <TextBlock Text="Если связи нет: 1) нажмите «Разрешить в брандмауэре» на ОБОИХ ПК (нужны права администратора); 2) в стороннем антивирусе разрешите MedControl вручную — его сетевой экран правило Windows может игнорировать; 3) в роутере выключите изоляцию Wi-Fi-клиентов (AP/Client isolation); 4) проверьте, что ключ и порт одинаковые. Фото не передаются (только записи). Удаление «навсегда» и очистка корзин не синхронизируются." TextWrapping="Wrap"/>
+                </StackPanel></ScrollViewer>
+            </TabItem>
+            <TabItem Header="Корзина">
+                <TabControl>
+                    <TabItem Header="Измерения/приёмы">
+                        <DockPanel>
+                            <WrapPanel DockPanel.Dock="Top">
+                                <Button Content="Восстановить измерение" Click="OnRestoreMeas"/>
+                                <Button Content="Восстановить приём" Click="OnRestoreIntake"/>
+                                <Button Content="Очистить корзину" Click="OnClearTrash"/>
+                                <Button Content="Обновить" Click="OnRefreshTrash"/>
+                            </WrapPanel>
+                            <ScrollViewer><StackPanel>
+                                <TextBlock Text="Удалённые измерения:" FontWeight="Bold"/>
+                                <ListBox x:Name="TrashMeasBox" Height="150"/>
+                                <TextBlock Text="Удалённые приёмы:" FontWeight="Bold"/>
+                                <ListBox x:Name="TrashIntakeBox" Height="150"/>
+                            </StackPanel></ScrollViewer>
+                        </DockPanel>
+                    </TabItem>
+                    <TabItem Header="Самочувствие">
+                        <DockPanel>
+                            <WrapPanel DockPanel.Dock="Top">
+                                <Button Content="Восстановить" Click="OnRestoreWb"/>
+                                <Button Content="Удалить навсегда" Click="OnDeleteWbForever"/>
+                                <Button Content="Очистить" Click="OnClearWbTrash"/>
+                            </WrapPanel>
+                            <ListBox x:Name="TrashWbBox"/>
+                        </DockPanel>
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+            <TabItem Header="Excel / PDF">
+                <ScrollViewer><StackPanel Margin="10">
+                    <TextBlock Text="Экспорт Excel (.xlsx)" FontWeight="Bold"/>
+                    <WrapPanel>
+                        <Button Content="Экспорт..." Click="OnExportExcel"/>
+                        <Button Content="Импорт..." Click="OnImportExcel"/>
+                    </WrapPanel>
+                    <TextBlock Text="Печать результатов / PDF" FontWeight="Bold" Margin="0,10,0,0"/>
+                    <WrapPanel>
+                        <ComboBox x:Name="ReportKindBox" Width="200" Margin="4">
+                            <ComboBoxItem Content="Измерения" Tag="measurements" IsSelected="True"/>
+                            <ComboBoxItem Content="Приём лекарств" Tag="intakes"/>
+                            <ComboBoxItem Content="Совместный отчёт" Tag="joint"/>
+                        </ComboBox>
+                        <CheckBox x:Name="LandscapeBox" Content="Альбомная" Margin="4"/>
+                        <Button Content="Предпросмотр" Click="OnPrintPreview"/>
+                        <Button Content="Сохранить PDF" Click="OnSavePdf"/>
+                        <Button Content="Открыть папку отчётов" Click="OnOpenReports"/>
+                    </WrapPanel>
+                    <TextBlock x:Name="ReportInfo" TextWrapping="Wrap"/>
+                </StackPanel></ScrollViewer>
+            </TabItem>
+            <TabItem Header="Настройки">
+                <ScrollViewer><StackPanel Margin="10" x:Name="SettingsPanel">
+                    <TextBlock Text="Тонометры (до 10)" FontWeight="Bold"/>
+                    <WrapPanel>
+                        <TextBox x:Name="NewTonoName" Width="200"/>
+                        <Button Content="Добавить тонометр" Click="OnAddTono"/>
+                    </WrapPanel>
+                    <ListBox x:Name="TonoBox" Height="100"/>
+                    <TextBlock Text="Пропущено через:" FontWeight="Bold" Margin="0,8,0,0"/>
+                    <ComboBox x:Name="GraceBox" Width="200">
+                        <ComboBoxItem Content="15 минут" Tag="15"/>
+                        <ComboBoxItem Content="30 минут" Tag="30"/>
+                        <ComboBoxItem Content="1 час" Tag="60" IsSelected="True"/>
+                        <ComboBoxItem Content="2 часа" Tag="120"/>
+                        <ComboBoxItem Content="3 часа" Tag="180"/>
+                        <ComboBoxItem Content="6 часов" Tag="360"/>
+                    </ComboBox>
+                    <TextBlock Text="Снижение громкости при напоминании (0–50%):" FontWeight="Bold" Margin="0,8,0,0"/>
+                    <WrapPanel><Slider x:Name="VolumeSlider" Minimum="0" Maximum="50" Width="200" Value="10"/><TextBlock x:Name="VolumeLabel" Text="10%" VerticalAlignment="Center"/></WrapPanel>
+                    <TextBlock Text="Размер шрифта интерфейса:" FontWeight="Bold" Margin="0,8,0,0"/>
+                    <TextBox x:Name="UiFontBox" Width="100"/>
+                    <TextBlock Text="Размер шрифта окна напоминания:" FontWeight="Bold" Margin="0,8,0,0"/>
+                    <TextBox x:Name="ReminderFontBox" Width="100"/>
+                    <CheckBox x:Name="AutostartBox" Content="Запускать MedControl вместе с Windows"/>
+                    <WrapPanel>
+                        <Button Content="Проверить напоминание" Click="OnTestReminder"/>
+                        <Button Content="Проверить базу данных" Click="OnCheckDb"/>
+                    </WrapPanel>
+                    <TextBlock x:Name="BackupInfo" TextWrapping="Wrap"/>
+                    <WrapPanel>
+                        <Button Content="Сменить папку backup..." Click="OnChangeBackupDir"/>
+                        <Button Content="Сохранить настройки" Click="OnSaveSettings"/>
+                        <Button Content="Подготовить перенос…" Click="OnPrepareTransfer"/>
+                        <Button Content="Перенести базу по сети…" Click="OnNetworkTransfer"/>
+                        <Button Content="Мастер настройки" Click="OnShowWizard"/>
+                        <Button Content="Удалить все данные" Click="OnDeleteAll"/>
+                    </WrapPanel>
+                    <TextBlock Text="Ручные копии (хранятся постоянно):" FontWeight="Bold" Margin="0,8,0,0"/>
+                    <ListBox x:Name="ManualBackupBox" Height="90"/>
+                    <WrapPanel>
+                        <Button Content="Восстановить из копии" Click="OnRestoreManual"/>
+                        <Button Content="Удалить копию" Click="OnDeleteManual"/>
+                    </WrapPanel>
+                    <TextBlock x:Name="SettingsStatus" TextWrapping="Wrap"/>
+                </StackPanel></ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>
