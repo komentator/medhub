@@ -68,4 +68,5 @@ public sealed class SettingsService
     public string PeerAddress { get => Get("PeerAddress", ""); set => Set("PeerAddress", value); }
     public bool PendingInitialSync { get => GetBool("PendingInitialSync", false); set => Set("PendingInitialSync", value.ToString()); }
     public string MeasurementInput { get => Get("MeasurementInput", "New"); set => Set("MeasurementInput", value); }
+    public string ExcelComparePath { get => Get("ExcelComparePath", ""); set => Set("ExcelComparePath", value); }
 }

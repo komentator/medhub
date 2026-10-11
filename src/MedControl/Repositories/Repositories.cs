@@ -300,6 +300,17 @@ public sealed class MeasurementRepository
         while (r.Read()) list.Add(new Tonometer { Id = Guid.Parse(r.GetString(0)), Name = r.GetString(1), IsDeleted = r.GetInt32(2) == 1, UpdatedAt = Row.DTN(r.GetValue(3)) });
         return list;
     }
+    // Порядок добавления (для привязки блоков дневника к тонометрам).
+    public List<Tonometer> GetTonometersByCreation()
+    {
+        var list = new List<Tonometer>();
+        using var c = _db.Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT Id,Name,IsDeleted,UpdatedAt FROM Tonometers WHERE IsDeleted=0 ORDER BY rowid";
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) list.Add(new Tonometer { Id = Guid.Parse(r.GetString(0)), Name = r.GetString(1), IsDeleted = r.GetInt32(2) == 1, UpdatedAt = Row.DTN(r.GetValue(3)) });
+        return list;
+    }
     public void SaveTonometer(Tonometer t)
     {
         t.UpdatedAt ??= DateTime.Now;

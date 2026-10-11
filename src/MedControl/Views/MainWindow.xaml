@@ -206,7 +206,9 @@
                         <Button Content="Экспорт..." Click="OnExportExcel"/>
                         <Button Content="Импорт..." Click="OnImportExcel"/>
                         <Button Content="Шаблон…" Click="OnExcelTemplate"/>
+                        <Button Content="Сверить базу с файлом" Click="OnCompareExcel"/>
                     </WrapPanel>
+                    <TextBlock x:Name="CompareInfo" TextWrapping="Wrap"/>
                     <TextBlock Text="Печать результатов / PDF" FontWeight="Bold" Margin="0,10,0,0"/>
                     <WrapPanel>
                         <ComboBox x:Name="ReportKindBox" Width="200" Margin="4">
@@ -250,6 +252,12 @@
                         <ComboBoxItem Content="Новое окно (несколько тонометров)" Tag="New" IsSelected="True"/>
                         <ComboBoxItem Content="Одно окно (по одному)" Tag="Old"/>
                     </ComboBox>
+                    <TextBlock Text="Эталонный Excel для сверки базы:" FontWeight="Bold" Margin="0,8,0,0"/>
+                    <WrapPanel>
+                        <TextBox x:Name="ExcelCompareBox" Width="420" IsReadOnly="True"/>
+                        <Button Content="Выбрать…" Click="OnBrowseCompare"/>
+                        <Button Content="Очистить" Click="OnClearCompare"/>
+                    </WrapPanel>
                     <CheckBox x:Name="AutostartBox" Content="Запускать MedControl вместе с Windows"/>
                     <WrapPanel>
                         <Button Content="Проверить напоминание" Click="OnTestReminder"/>

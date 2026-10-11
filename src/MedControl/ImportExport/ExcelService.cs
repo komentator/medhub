@@ -1,3 +1,4 @@
+using System.IO;
 using ClosedXML.Excel;
 using MedControl.Models;
 using MedControl.Repositories;
@@ -180,16 +181,32 @@ public sealed class ExcelService
         return (ctx.Imported, ctx.Skipped);
     }
 
-    // Блочный дневник: A=дата, B=время (общее), CDE=тонометр 1, FGHI: F пропускается, GHI=тонометр 2.
+    // Блочный дневник: A=дата, B=время (общее для обоих), CDE=первый тонометр,
+    // F пропускается, GHI=второй тонометр. Блоки привязаны к ПОРЯДКУ ДОБАВЛЕНИЯ
+    // тонометров в программе (имена из файла игнорируются).
+    // Время не распознано → 09:00, следующее без времени → 10:00 и т.д. (по дню).
     private (int Imported, int Skipped) ImportDiary(IXLWorksheet ws)
     {
-        var ctx = NewCtx();
         var rows = ws.RowsUsed().ToList();
         int h = rows.FindIndex(r => (r.Cell(1).GetString() ?? "").Trim().Equals("дата", StringComparison.OrdinalIgnoreCase));
         if (h < 0) return (0, 0);
-        string t1 = TonoName(h > 0 ? (rows[h - 1].Cell(1).GetString() ?? "") : "", "A&D UA-777");
-        string t2 = TonoName(h > 0 ? (rows[h - 1].Cell(6).GetString() ?? "") : "", "Little Doctor");
         var data = rows.Skip(h + 1).ToList();
+        if (data.Count == 0) return (0, 0);
+
+        bool use1 = data.Any(r => Txt(r.Cell(3)) != "" || Txt(r.Cell(4)) != "" || Txt(r.Cell(5)) != "");
+        bool use2 = data.Any(r => Txt(r.Cell(7)) != "" || Txt(r.Cell(8)) != "" || Txt(r.Cell(9)) != "");
+        int need = (use1 ? 1 : 0) + (use2 ? 1 : 0);
+        var tonos = _meas.GetTonometersByCreation();
+        while (tonos.Count < need && tonos.Count < 10)
+        {
+            var t = new Tonometer { Name = $"Тонометр {tonos.Count + 1}" };
+            _meas.SaveTonometer(t);
+            tonos.Add(t);
+        }
+        string? n1 = use1 && tonos.Count > 0 ? tonos[0].Name : null;
+        string? n2 = use2 && tonos.Count > 1 ? tonos[1].Name : null;
+
+        var ctx = NewCtx();
 
         // Стартовый контекст дат: первая явная полная дата.
         int? ctxY = null, ctxM = null;
@@ -199,7 +216,7 @@ public sealed class ExcelService
         }
         int? lastDay = null;
         DateTime? lastDate = null;
-        TimeOnly? lastTime = null;
+        var timeless = new Dictionary<DateOnly, int>(); // счётчик безвременных по дню
 
         foreach (var r in data)
         {
@@ -208,6 +225,7 @@ public sealed class ExcelService
                 string A = Txt(r.Cell(1)), B = Txt(r.Cell(2));
                 bool hasVals = new[] { 3, 4, 5, 7, 8, 9 }.Any(c => Txt(r.Cell(c)) != "");
                 if (A == "" && B == "" && !hasVals) continue; // пустая строка
+                if (IsHeaderJunk(r)) continue; // строка-подпись полей («верхнее»…) — молча
 
                 DateTime? date = ResolveDiaryDate(r.Cell(1), A, ref ctxY, ref ctxM, ref lastDay, lastDate);
                 if (date == null)
@@ -224,36 +242,52 @@ public sealed class ExcelService
                 if (IsDateCell(r.Cell(2)))
                 {
                     var bt = r.Cell(2).GetDateTime();
-                    if (bt.Year < 2000) { time = TimeOnly.FromDateTime(bt); lastTime = time; } // время Excel
-                    else { ctx.Skipped++; continue; } // мусор вместо времени
+                    if (bt.Year < 2000) time = TimeOnly.FromDateTime(bt); // время Excel
                 }
-                else if (TryTimeText(B, out var tt)) { time = tt; lastTime = tt; }
-                else if (B == "" && lastTime != null) time = lastTime;
-                if (time == null) { ctx.Skipped++; continue; }
+                else if (TryTimeText(B, out var tt)) time = tt;
+                if (time == null)
+                {
+                    // Время не определить: 09:00, следующее 10:00 и т.д. (по дню).
+                    var day = DateOnly.FromDateTime(date.Value);
+                    timeless.TryGetValue(day, out int k);
+                    time = new TimeOnly((9 + k) % 24, 0);
+                    timeless[day] = k + 1;
+                }
 
                 DateTime taken = date.Value.Date + time.Value.ToTimeSpan();
-                bool any = false;
-                if (TryVal(r.Cell(3), out int s1) && TryVal(r.Cell(4), out int d1) && TryVal(r.Cell(5), out int p1))
-                    any |= AddMeasurement(ctx, t1, taken, s1, d1, p1, "");
-                else if (Txt(r.Cell(3)) != "" || Txt(r.Cell(4)) != "" || Txt(r.Cell(5)) != "") ctx.Skipped++;
-                if (TryVal(r.Cell(7), out int s2) && TryVal(r.Cell(8), out int d2) && TryVal(r.Cell(9), out int p2))
-                    any |= AddMeasurement(ctx, t2, taken, s2, d2, p2, "");
-                else if (Txt(r.Cell(7)) != "" || Txt(r.Cell(8)) != "" || Txt(r.Cell(9)) != "") ctx.Skipped++;
-                _ = any;
+                if (n1 != null)
+                {
+                    if (TryVal(r.Cell(3), out int s1) && TryVal(r.Cell(4), out int d1) && TryVal(r.Cell(5), out int p1))
+                        AddMeasurement(ctx, n1, taken, s1, d1, p1, "");
+                    else if (Txt(r.Cell(3)) != "" || Txt(r.Cell(4)) != "" || Txt(r.Cell(5)) != "") ctx.Skipped++;
+                }
+                if (n2 != null)
+                {
+                    if (TryVal(r.Cell(7), out int s2) && TryVal(r.Cell(8), out int d2) && TryVal(r.Cell(9), out int p2))
+                        AddMeasurement(ctx, n2, taken, s2, d2, p2, "");
+                    else if (Txt(r.Cell(7)) != "" || Txt(r.Cell(8)) != "" || Txt(r.Cell(9)) != "") ctx.Skipped++;
+                }
             }
             catch (Exception ex) { _log.Write("Import", ex.Message); ctx.Skipped++; }
         }
         return (ctx.Imported, ctx.Skipped);
     }
 
-    private static string TonoName(string label, string fallback)
+    // Строка из названий полей, а не данных.
+    private static bool IsHeaderJunk(IXLRow r)
     {
-        label = (label ?? "").Trim();
-        if (label == "") return fallback;
-        var m = System.Text.RegularExpressions.Regex.Match(label, @"\(([^)]+)\)");
-        if (m.Success && !string.IsNullOrWhiteSpace(m.Groups[1].Value)) return m.Groups[1].Value.Trim();
-        if (label.Contains("тонометр", StringComparison.OrdinalIgnoreCase)) return fallback;
-        return label;
+        try
+        {
+            bool hasNum = new[] { 3, 4, 5, 7, 8, 9 }.Any(c =>
+            {
+                try { return r.Cell(c).DataType == XLDataType.Number; }
+                catch { return false; }
+            });
+            if (hasNum) return false;
+            string[] words = ["время", "верхнее", "нижнее", "пульс", "дата", "тонометр", "самочувствие", "комментарий"];
+            return Enumerable.Range(1, 9).Any(c => words.Any(w => Txt(r.Cell(c)).ToLowerInvariant().Contains(w)));
+        }
+        catch { return false; }
     }
 
     private static string Txt(IXLCell c)
@@ -401,14 +435,53 @@ public sealed class ExcelService
     }
 
     // Шаблон для исторических замеров: лист с примером + лист-инструкция.
+    public sealed record CompareResult(int Matched, List<string> OnlyInFile, List<string> OnlyInDb, int InvalidRows, int FileTotal, int DbTotal);
+
+    // Сверка базы с эталонным Excel: те же правила разбора (через временную БД),
+    // ничего не пишет. Списки урезаны до 30 для показа.
+    public CompareResult CompareWithFile(string file)
+    {
+        string tmp = Path.Combine(Path.GetTempPath(), $"mc_cmp_{Guid.NewGuid():N}.db");
+        try
+        {
+            var tmpDb = new Data.Db(tmp);
+            var tmpSvc = new ExcelService(new MeasurementRepository(tmpDb), new IntakeRepository(tmpDb),
+                new WellBeingRepository(tmpDb), _log);
+            var (imp, skip) = tmpSvc.Import(file);
+            _ = imp;
+            var fileRows = new MeasurementRepository(tmpDb)
+                .GetRange(new DateTime(2000, 1, 1), DateTime.Now.AddDays(2));
+            var dbRows = _meas.GetRange(new DateTime(2000, 1, 1), DateTime.Now.AddDays(2));
+            static string Key(Models.Measurement m) =>
+                DedupHelper.MeasurementKey(m.TakenAt, m.TonometerName, m.Systolic, m.Diastolic, m.Pulse);
+            static string Desc(Models.Measurement m) =>
+                $"{m.TakenAt:dd.MM.yyyy HH:mm} | {m.TonometerName} | {m.Systolic}/{m.Diastolic} п.{m.Pulse}";
+            var dbKeys = dbRows.ToDictionary(Key, m => m);
+            var fileKeys = fileRows.ToDictionary(Key, m => m);
+            var onlyFile = fileKeys.Keys.Where(k => !dbKeys.ContainsKey(k))
+                .Select(k => Desc(fileKeys[k])).OrderBy(s => s).ToList();
+            var onlyDb = dbKeys.Keys.Where(k => !fileKeys.ContainsKey(k))
+                .Select(k => Desc(dbKeys[k])).OrderBy(s => s).ToList();
+            int matched = fileKeys.Keys.Count(k => dbKeys.ContainsKey(k));
+            const int cap = 30;
+            return new CompareResult(matched,
+                onlyFile.Take(cap).ToList(), onlyDb.Take(cap).ToList(), skip,
+                fileRows.Count, dbRows.Count);
+        }
+        finally
+        {
+            try { File.Delete(tmp); File.Delete(tmp + "-wal"); File.Delete(tmp + "-shm"); } catch { }
+        }
+    }
+
     // Шаблон блочного дневника: слева Тонометр 1, справа Тонометр 2.
     // Проверки Excel не дадут ввести мусор; импорт перепроверит всё ещё раз.
     public void CreateTemplate(string file)
     {
         using var book = new XLWorkbook();
         var ws = book.Worksheets.Add("Измерения");
-        ws.Cell(1, 1).Value = "Тонометр 1 (A&D UA-777)";
-        ws.Cell(1, 6).Value = "Тонометр 2 (Little Doctor)";
+        ws.Cell(1, 1).Value = "Тонометр 1";
+        ws.Cell(1, 6).Value = "Тонометр 2";
         string[] h = ["дата", "время", "верхнее", "нижнее", "пульс", "время", "верхнее", "нижнее", "пульс"];
         for (int i = 0; i < h.Length; i++) ws.Cell(2, i + 1).Value = h[i];
         ws.Cell(3, 1).Value = "01.10.2026"; ws.Cell(3, 2).Value = "08:00";

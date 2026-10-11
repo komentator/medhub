@@ -69,6 +69,7 @@ public partial class MainWindow : Window
         foreach (var it in MeasureInputBox.Items)
             if (it is ComboBoxItem ci && ci.Tag?.ToString() == _ctx.Settings.MeasurementInput)
             { MeasureInputBox.SelectedItem = it; break; }
+        ExcelCompareBox.Text = _ctx.Settings.ExcelComparePath;
         DeviceNameBox.Text = _ctx.Settings.DeviceName;
         SyncServerBox.IsChecked = _ctx.Settings.SyncServerEnabled;
         SyncPortBox.Text = _ctx.Settings.SyncPort.ToString();
@@ -414,6 +415,38 @@ public partial class MainWindow : Window
             catch (Exception ex) { MessageBox.Show("Ошибка импорта: " + ex.Message); }
         }
     }
+    private void OnBrowseCompare(object s, RoutedEventArgs e)
+    {
+        var dlg = new OpenFileDialog { Filter = "Excel (*.xlsx)|*.xlsx" };
+        if (dlg.ShowDialog() == true) ExcelCompareBox.Text = dlg.FileName;
+    }
+    private void OnClearCompare(object s, RoutedEventArgs e) => ExcelCompareBox.Text = "";
+    private void OnCompareExcel(object s, RoutedEventArgs e)
+    {
+        var file = _ctx.Settings.ExcelComparePath;
+        if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
+        {
+            MessageBox.Show("Сначала выберите эталонный файл в настройках («Эталонный Excel») и нажмите «Сохранить настройки».");
+            return;
+        }
+        CompareInfo.Text = "Сверка…";
+        Task.Run(() =>
+        {
+            try
+            {
+                var r = _ctx.Excel.CompareWithFile(file);
+                Dispatcher.Invoke(() =>
+                {
+                    var t = $"В файле: {r.FileTotal}, в базе: {r.DbTotal}, совпало: {r.Matched}, битых строк: {r.InvalidRows}.";
+                    if (r.OnlyInFile.Count > 0) t += "\n\nЕсть в файле, нет в базе:\n" + string.Join("\n", r.OnlyInFile);
+                    if (r.OnlyInDb.Count > 0) t += "\n\nЕсть в базе, нет в файле:\n" + string.Join("\n", r.OnlyInDb);
+                    if (r.OnlyInFile.Count == 0 && r.OnlyInDb.Count == 0) t += "\n\nПолное совпадение.";
+                    CompareInfo.Text = t;
+                });
+            }
+            catch (Exception ex) { Dispatcher.Invoke(() => CompareInfo.Text = "Ошибка сверки: " + ex.Message); }
+        });
+    }
     private void OnExcelTemplate(object s, RoutedEventArgs e)
     {
         var dlg = new SaveFileDialog { Filter = "Excel (*.xlsx)|*.xlsx", FileName = "medcontrol_template.xlsx" };
@@ -622,6 +655,7 @@ public partial class MainWindow : Window
             FontSize = _ctx.Settings.UiFontSize;
             if (MeasureInputBox.SelectedItem is ComboBoxItem mi && mi.Tag?.ToString() is string tag)
                 _ctx.Settings.MeasurementInput = tag;
+            _ctx.Settings.ExcelComparePath = (ExcelCompareBox.Text ?? "").Trim();
             _ctx.Settings.DeviceName = (DeviceNameBox.Text ?? "").Trim();
             if (string.IsNullOrWhiteSpace(_ctx.Settings.DeviceName)) _ctx.Settings.DeviceName = Environment.MachineName;
             if (int.TryParse((SyncPortBox.Text ?? "").Trim(), out int port) && port > 0 && port < 65536)
