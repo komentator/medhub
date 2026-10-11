@@ -23,7 +23,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _ctx = ctx;
-        Title = $"MedControl {UpdateCheck.Current()}";
+        Title = $"MedControl {UpdateCheck.Short(UpdateCheck.Current())}";
         _vm = new MainViewModel(ctx);
         VolumeSlider.ValueChanged += (_, _) => VolumeLabel.Text = $"{(int)VolumeSlider.Value}%";
         // Тултипы графиков кириллическим шрифтом (иначе Skia рисует «квадратики»),

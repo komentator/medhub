@@ -45,7 +45,7 @@ public sealed class TransferService
                     cmd.ExecuteNonQuery();
                 }
                 if (Db.QuickCheck(tmp).Trim() != "ok") return (false, "База не прошла проверку, пакет не создан.");
-                var meta = new TransferMeta(leaderIp, _settings.DeviceName, DateTime.UtcNow.ToString("O"), UpdateCheck.Current().ToString(), 3);
+                var meta = new TransferMeta(leaderIp, _settings.DeviceName, DateTime.UtcNow.ToString("O"), UpdateCheck.Short(UpdateCheck.Current()), 3);
                 if (File.Exists(destFile)) File.Delete(destFile);
                 using var zip = ZipFile.Open(destFile, ZipArchiveMode.Create);
                 zip.CreateEntryFromFile(tmp, "data/medcontrol.db", CompressionLevel.Optimal);

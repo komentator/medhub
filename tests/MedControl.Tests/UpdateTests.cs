@@ -25,4 +25,11 @@ public class UpdateCheckTests
     [InlineData("1.0.9", "1.0.10", true)]
     public void IsNewer_Rule(string cur, string latest, bool expected)
         => Assert.Equal(expected, UpdateCheck.IsNewer(Version.Parse(cur), Version.Parse(latest)));
+
+    [Theory]
+    [InlineData("1.0.11.0", "1.0.11")]
+    [InlineData("1.1.1.0", "1.1.1")]
+    [InlineData("1.0.4", "1.0.4")]
+    public void Short_HidesRevision(string full, string expected)
+        => Assert.Equal(expected, UpdateCheck.Short(Version.Parse(full)));
 }

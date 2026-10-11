@@ -20,6 +20,9 @@ public static class UpdateCheck
 
     public static bool IsNewer(Version current, Version latest) => latest > current;
 
+    // Коротко для показа: «1.0.11», без четвёртого нуля.
+    public static string Short(Version v) => $"{v.Major}.{v.Minor}.{Math.Max(v.Build, 0)}";
+
     public static Version Current()
         => Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0);
 }
@@ -47,9 +50,9 @@ public sealed class UpdateService
                 var root = doc.RootElement;
                 var tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
                 var latest = UpdateCheck.ParseTag(tag);
-            if (latest == null) return new UpdateInfo(false, "", "", "Не удалось прочитать версию.", cur.ToString(), 0);
+            if (latest == null) return new UpdateInfo(false, "", "", "Не удалось прочитать версию.", UpdateCheck.Short(cur), 0);
             if (!UpdateCheck.IsNewer(cur, latest))
-                return new UpdateInfo(false, latest.ToString(), "", "", cur.ToString(), 0);
+                return new UpdateInfo(false, UpdateCheck.Short(latest), "", "", UpdateCheck.Short(cur), 0);
             string url = "", notes = "";
             long size = 0;
             if (root.TryGetProperty("assets", out var assets))
@@ -68,7 +71,7 @@ public sealed class UpdateService
             }
             if (root.TryGetProperty("body", out var b)) notes = b.GetString() ?? "";
             if (string.IsNullOrEmpty(url) && root.TryGetProperty("html_url", out var h)) url = h.GetString() ?? "";
-            return new UpdateInfo(true, latest.ToString(), url, notes, cur.ToString(), size);
+            return new UpdateInfo(true, UpdateCheck.Short(latest), url, notes, UpdateCheck.Short(cur), size);
             }
             catch (Exception ex)
             {
