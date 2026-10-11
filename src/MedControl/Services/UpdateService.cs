@@ -26,7 +26,7 @@ public static class UpdateCheck
 
 public sealed class UpdateService
 {
-    private const string Api = "https://api.github.com/komentator/medhub/releases/latest";
+    private const string Api = "https://api.github.com/repos/komentator/medhub/releases/latest";
     private readonly LogService _log;
     public UpdateService(LogService log) => _log = log;
 
