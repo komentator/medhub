@@ -33,42 +33,48 @@ public sealed class UpdateService
     public async Task<UpdateInfo> CheckAsync()
     {
         var cur = UpdateCheck.Current();
-        try
+        Exception? last = null;
+        for (int attempt = 0; attempt < 3; attempt++)
         {
-            using var http = new HttpClient();
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("MedControl");
-            http.Timeout = TimeSpan.FromSeconds(20);
-            var json = await http.GetStringAsync(Api);
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            var tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
-            var latest = UpdateCheck.ParseTag(tag);
-            if (latest == null) return new UpdateInfo(false, "", "", "Не удалось прочитать версию.", cur.ToString());
-            if (!UpdateCheck.IsNewer(cur, latest))
-                return new UpdateInfo(false, latest.ToString(), "", "", cur.ToString());
-            string url = "", notes = "";
-            if (root.TryGetProperty("assets", out var assets))
+            try
             {
-                foreach (var a in assets.EnumerateArray())
+                if (attempt > 0) await Task.Delay(2000);
+                using var http = new HttpClient();
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("MedControl");
+                http.Timeout = TimeSpan.FromSeconds(60);
+                var json = await http.GetStringAsync(Api);
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                var tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
+                var latest = UpdateCheck.ParseTag(tag);
+                if (latest == null) return new UpdateInfo(false, "", "", "Не удалось прочитать версию.", cur.ToString());
+                if (!UpdateCheck.IsNewer(cur, latest))
+                    return new UpdateInfo(false, latest.ToString(), "", "", cur.ToString());
+                string url = "", notes = "";
+                if (root.TryGetProperty("assets", out var assets))
                 {
-                    var name = a.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-                    if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                        a.TryGetProperty("browser_download_url", out var u))
+                    foreach (var a in assets.EnumerateArray())
                     {
-                        url = u.GetString() ?? "";
-                        break;
+                        var name = a.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                            a.TryGetProperty("browser_download_url", out var u))
+                        {
+                            url = u.GetString() ?? "";
+                            break;
+                        }
                     }
                 }
+                if (root.TryGetProperty("body", out var b)) notes = b.GetString() ?? "";
+                if (string.IsNullOrEmpty(url) && root.TryGetProperty("html_url", out var h)) url = h.GetString() ?? "";
+                return new UpdateInfo(true, latest.ToString(), url, notes, cur.ToString());
             }
-            if (root.TryGetProperty("body", out var b)) notes = b.GetString() ?? "";
-            if (string.IsNullOrEmpty(url) && root.TryGetProperty("html_url", out var h)) url = h.GetString() ?? "";
-            return new UpdateInfo(true, latest.ToString(), url, notes, cur.ToString());
+            catch (Exception ex)
+            {
+                last = ex;
+                _log.Write("Update", $"Check попытка {attempt + 1}: " + ex.Message);
+            }
         }
-        catch (Exception ex)
-        {
-            _log.Write("Update", "Check: " + ex.Message);
-            throw new InvalidOperationException("Нет связи с GitHub: " + ex.Message);
-        }
+        throw new InvalidOperationException("Нет связи с GitHub: " + last?.Message + " Проверьте интернет и антивирус.");
     }
 
     public async Task<string> DownloadAsync(string url, string dest)
