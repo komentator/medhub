@@ -52,6 +52,18 @@ dotnet publish src/MedControl -c Release -r win-x64 --self-contained false
 
 Требования: .NET 8 SDK, Windows 10/11 x64.
 
+## Версии и обновления
+
+Каждое изменение выходит под новой версией (`<Version>` в `MedControl.csproj`
++ `MyAppVersion` в `installer/innosetup.iss`). Кнопка «Проверить обновления»
+в настройках смотрит последний Release на GitHub и предлагает скачать setup.
+
+Как выпустить версию `X.Y.Z`:
+1. Поднять версии, собрать, прогнать тесты, опубликовать, собрать установщик.
+2. Закоммитить, запушить, поставить тег: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+3. На GitHub создать **Release** `vX.Y.Z` и прикрепить
+   `installer/output/MedControl_Setup_X.Y.Z.exe`.
+
 ## Технологии
 
 C# · .NET 8 LTS · WPF (MVVM) · SQLite (Microsoft.Data.Sqlite) · NAudio ·

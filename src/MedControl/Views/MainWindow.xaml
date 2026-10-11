@@ -248,7 +248,9 @@
                     <WrapPanel>
                         <Button Content="Проверить напоминание" Click="OnTestReminder"/>
                         <Button Content="Проверить базу данных" Click="OnCheckDb"/>
+                        <Button Content="Проверить обновления" Click="OnCheckUpdates"/>
                     </WrapPanel>
+                    <TextBlock x:Name="UpdateStatus" TextWrapping="Wrap"/>
                     <TextBlock x:Name="BackupInfo" TextWrapping="Wrap"/>
                     <WrapPanel>
                         <Button Content="Сменить папку backup..." Click="OnChangeBackupDir"/>

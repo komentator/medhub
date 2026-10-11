@@ -496,6 +496,54 @@ public partial class MainWindow : Window
         SettingsStatus.Text = "Проверка БД: " + r;
         MessageBox.Show("Проверка базы данных: " + r, "MedControl");
     }
+    private void OnCheckUpdates(object s, RoutedEventArgs e)
+    {
+        UpdateStatus.Text = "Проверка обновлений…";
+        Task.Run(async () =>
+        {
+            try
+            {
+                var info = await _ctx.Updates.CheckAsync();
+                Dispatcher.Invoke(() =>
+                {
+                    if (!info.Available)
+                    {
+                        UpdateStatus.Text = $"У вас последняя версия ({info.Current}).";
+                        return;
+                    }
+                    UpdateStatus.Text = $"Доступна версия {info.Version} (у вас {info.Current}).";
+                    var dr = MessageBox.Show(
+                        $"Доступна версия {info.Version} (установлена {info.Current}).\n\n{info.Notes}\n\nСкачать и установить?",
+                        "MedControl — обновление", MessageBoxButton.YesNo, MessageBoxImage.Information);
+                    if (dr != MessageBoxResult.Yes) return;
+                    if (!info.Url.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(info.Url) { UseShellExecute = true }); }
+                        catch (Exception ex) { MessageBox.Show("Не удалось открыть: " + ex.Message); }
+                        return;
+                    }
+                    UpdateStatus.Text = "Загрузка обновления…";
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var dest = Path.Combine(Path.GetTempPath(), $"MedControl_Setup_{info.Version}.exe");
+                            await _ctx.Updates.DownloadAsync(info.Url, dest);
+                            Dispatcher.Invoke(() =>
+                            {
+                                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dest) { UseShellExecute = true }); }
+                                catch (Exception ex) { MessageBox.Show("Не удалось запустить установку: " + ex.Message); return; }
+                                AllowClose = true;
+                                Application.Current.Shutdown();
+                            });
+                        }
+                        catch (Exception ex) { Dispatcher.Invoke(() => UpdateStatus.Text = "Ошибка загрузки: " + ex.Message); }
+                    });
+                });
+            }
+            catch (Exception ex) { Dispatcher.Invoke(() => UpdateStatus.Text = "Проверка не удалась: " + ex.Message); }
+        });
+    }
     private void OnChangeBackupDir(object s, RoutedEventArgs e)
     {
         var dlg = new OpenFolderDialog { Title = "Папка резервных копий" };

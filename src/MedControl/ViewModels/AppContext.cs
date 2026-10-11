@@ -34,6 +34,7 @@ public sealed class AppServices
     public SyncService Sync { get; }
     public PhotoService Photos { get; }
     public TransferService Transfer { get; }
+    public UpdateService Updates { get; }
     public event Action? Synced;
 
     public AppServices()
@@ -58,6 +59,7 @@ public sealed class AppServices
         Photos = new PhotoService(Log);
         Transfer = new TransferService(Settings, Log);
         Sync.Transfer = Transfer;
+        Updates = new UpdateService(Log);
         Log.Write("App", "Запуск MedControl");
     }
 }
