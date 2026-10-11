@@ -84,10 +84,11 @@ public sealed class ExcelService
         book.SaveAs(file);
     }
 
-    // Импорт: пропускать дубликаты (§24).
-    public (int Meas, int Intakes) Import(string file)
+    // Импорт исторических замеров: пропускать дубликаты (§24).
+    // Возвращает (импортировано, пропущено): пропущены дубликаты и битые строки.
+    public (int Imported, int Skipped) Import(string file)
     {
-        int nm = 0;
+        int nm = 0, skip = 0;
         try
         {
             using var book = new XLWorkbook(file);
@@ -100,13 +101,20 @@ public sealed class ExcelService
                 {
                     try
                     {
-                        var taken = DateTime.Parse(row.Cell(1).GetString() + " " + row.Cell(2).GetString());
-                        var tname = row.Cell(3).GetString();
-                        int s = (int)row.Cell(4).GetDouble(), d = (int)row.Cell(5).GetDouble(), p = (int)row.Cell(6).GetDouble();
+                        if (!TryParseDateTime(row.Cell(1), row.Cell(2), out var taken)) { skip++; continue; }
+                        var tname = (row.Cell(3).GetString() ?? "").Trim();
+                        if (string.IsNullOrEmpty(tname)) { skip++; continue; }
+                        if (!TryParseInt(row.Cell(4), out int s) || !TryParseInt(row.Cell(5), out int d) || !TryParseInt(row.Cell(6), out int p)) { skip++; continue; }
+                        var (ok1, _) = Services.ValidationService.ValidatePressure(s, d);
+                        var (ok2, _) = Services.ValidationService.ValidatePulse(p);
+                        if (!ok1 || !ok2) { skip++; continue; }
                         var key = DedupHelper.MeasurementKey(taken, tname, s, d, p);
-                        if (!existing.Add(key)) continue;
+                        if (!existing.Add(key)) { skip++; continue; } // дубликат
                         if (!tonos.TryGetValue(tname.ToLowerInvariant(), out var t))
                         {
+                            if (tonos.Count >= 10) { skip++; continue; } // лимит §15
+                            var (okt, _) = Services.ValidationService.ValidateTonometer(tname);
+                            if (!okt) { skip++; continue; }
                             t = new Tonometer { Name = tname };
                             _meas.SaveTonometer(t);
                             tonos[tname.ToLowerInvariant()] = t;
@@ -114,16 +122,91 @@ public sealed class ExcelService
                         _meas.Upsert(new Measurement
                         {
                             TonometerId = t.Id, TonometerName = t.Name, TakenAt = taken,
-                            Systolic = s, Diastolic = d, Pulse = p, Comment = row.Cell(8).GetString(),
+                            Systolic = s, Diastolic = d, Pulse = p, Comment = row.Cell(8).GetString() ?? "",
                             CreatedAt = taken,
                         });
                         nm++;
                     }
-                    catch (Exception ex) { _log.Write("Import", ex.Message); }
+                    catch (Exception ex) { _log.Write("Import", ex.Message); skip++; }
                 }
             }
         }
         catch (Exception ex) { _log.Write("Import", ex.Message); throw; }
-        return (nm, 0);
+        return (nm, skip);
+    }
+
+    private static bool TryParseInt(IXLCell cell, out int v)
+    {
+        v = 0;
+        try
+        {
+            if (cell.DataType == XLDataType.Number) { v = (int)cell.GetDouble(); return true; }
+            var s = (cell.GetString() ?? "").Trim().Replace(',', '.');
+            if (double.TryParse(s, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out double d))
+            {
+                v = (int)d;
+                return true;
+            }
+            return false;
+        }
+        catch { return false; }
+    }
+
+    // Дата/время из двух колонок; понимаем даты Excel, "дд.ММ.гггг", "гггг-ММ-дд",
+    // время "ЧЧ:мм" или датой с временем в первой колонке.
+    private static bool TryParseDateTime(IXLCell dateCell, IXLCell timeCell, out DateTime taken)
+    {
+        taken = default;
+        try
+        {
+            if (dateCell.DataType == XLDataType.DateTime)
+            {
+                taken = dateCell.GetDateTime();
+                if (timeCell.DataType == XLDataType.DateTime)
+                    taken = taken.Date + timeCell.GetDateTime().TimeOfDay;
+                else if (TimeOnly.TryParse((timeCell.GetString() ?? "").Trim(), out var tt))
+                    taken = taken.Date + tt.ToTimeSpan();
+                else if (TimeSpan.TryParse((timeCell.GetString() ?? "").Trim(), out var ts))
+                    taken = taken.Date + ts;
+                return taken.Year >= 2000 && taken <= DateTime.Now.AddDays(1);
+            }
+            string ds = (dateCell.GetString() ?? "").Trim();
+            string ts2 = (timeCell.GetString() ?? "").Trim();
+            string[] formats = ["dd.MM.yyyy HH:mm", "dd.MM.yyyy H:mm", "yyyy-MM-dd HH:mm",
+                "dd.MM.yyyy", "yyyy-MM-dd", "dd/MM/yyyy", "MM/dd/yyyy"];
+            if (DateTime.TryParseExact(ds + " " + ts2, formats,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out taken) ||
+                DateTime.TryParseExact(ds, formats, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out taken))
+            {
+                if (taken.TimeOfDay == TimeSpan.Zero && TimeOnly.TryParse(ts2, out var tt2))
+                    taken = taken.Date + tt2.ToTimeSpan();
+                return taken.Year >= 2000 && taken <= DateTime.Now.AddDays(1);
+            }
+            return false;
+        }
+        catch { return false; }
+    }
+
+    // Шаблон для исторических замеров: лист с примером + лист-инструкция.
+    public void CreateTemplate(string file)
+    {
+        using var book = new XLWorkbook();
+        var ws = book.Worksheets.Add("Измерения");
+        string[] h = ["Дата", "Время", "Тонометр", "Верхнее", "Нижнее", "Пульс", "Самочувствие", "Комментарий"];
+        for (int i = 0; i < h.Length; i++) ws.Cell(1, i + 1).Value = h[i];
+        ws.Cell(2, 1).Value = "01.10.2026"; ws.Cell(2, 2).Value = "08:00";
+        ws.Cell(2, 3).Value = "Тонометр 1"; ws.Cell(2, 4).Value = 120;
+        ws.Cell(2, 5).Value = 80; ws.Cell(2, 6).Value = 70;
+        ws.Cell(3, 1).Value = "01.10.2026"; ws.Cell(3, 2).Value = "08:05";
+        ws.Cell(3, 3).Value = "Тонометр 2"; ws.Cell(3, 4).Value = 118;
+        ws.Cell(3, 5).Value = 78; ws.Cell(3, 6).Value = 72;
+        var how = book.Worksheets.Add("Как заполнять");
+        how.Cell(1, 1).Value = "Удалите строки-примеры и впишите свои замеры. " +
+            "Дата: ДД.ММ.ГГГГ, время: ЧЧ:ММ. Тонометры создаются сами. " +
+            "Дубликаты при повторном импорте пропускаются.";
+        book.SaveAs(file);
     }
 }

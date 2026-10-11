@@ -407,11 +407,24 @@ public partial class MainWindow : Window
         {
             try
             {
-                var (m, _) = _ctx.Excel.Import(dlg.FileName);
-                MessageBox.Show($"Импортировано новых измерений: {m}");
+                var (imp, skip) = _ctx.Excel.Import(dlg.FileName);
+                MessageBox.Show($"Импортировано новых измерений: {imp}\nПропущено (дубликаты/битые строки): {skip}");
                 RefreshAll();
             }
             catch (Exception ex) { MessageBox.Show("Ошибка импорта: " + ex.Message); }
+        }
+    }
+    private void OnExcelTemplate(object s, RoutedEventArgs e)
+    {
+        var dlg = new SaveFileDialog { Filter = "Excel (*.xlsx)|*.xlsx", FileName = "medcontrol_template.xlsx" };
+        if (dlg.ShowDialog() == true)
+        {
+            try
+            {
+                _ctx.Excel.CreateTemplate(dlg.FileName);
+                MessageBox.Show("Шаблон сохранён: " + dlg.FileName + "\nУдалите строки-примеры и впишите свои замеры.");
+            }
+            catch (Exception ex) { MessageBox.Show("Ошибка шаблона: " + ex.Message); }
         }
     }
     private void OnPrintPreview(object s, RoutedEventArgs e)
