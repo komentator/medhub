@@ -34,4 +34,9 @@ Desktop.ini
 # Logs / local runtime data (never commit user data)
 *.log
 
+# Personal measurement tables (health data) + Excel lock files.
+# Such files go to GitHub only as release assets, never into git history.
+*.xlsx
+~$*
+
 # Temp icon generator (outside repo, kept just in case)
