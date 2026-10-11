@@ -66,6 +66,9 @@ public partial class MainWindow : Window
         UiFontBox.Text = _ctx.Settings.UiFontSize.ToString("0");
         ReminderFontBox.Text = _ctx.Settings.ReminderFontSize.ToString("0");
         FontSize = _ctx.Settings.UiFontSize;
+        foreach (var it in MeasureInputBox.Items)
+            if (it is ComboBoxItem ci && ci.Tag?.ToString() == _ctx.Settings.MeasurementInput)
+            { MeasureInputBox.SelectedItem = it; break; }
         DeviceNameBox.Text = _ctx.Settings.DeviceName;
         SyncServerBox.IsChecked = _ctx.Settings.SyncServerEnabled;
         SyncPortBox.Text = _ctx.Settings.SyncPort.ToString();
@@ -117,7 +120,14 @@ public partial class MainWindow : Window
                 Tabs.SelectedIndex = 9;
             return;
         }
-        if (MeasurementForm.Show(_ctx, this, null, historic: false)) RefreshAll();
+        if (_ctx.Settings.MeasurementInput == "Old")
+        {
+            if (MeasurementForm.Show(_ctx, this, null, historic: false)) RefreshAll();
+        }
+        else
+        {
+            if (MeasureMultiForm.Show(_ctx, this)) RefreshAll();
+        }
     }
     private void OnNewHistoricMeasurement(object s, RoutedEventArgs e)
     {
@@ -597,6 +607,8 @@ public partial class MainWindow : Window
             if (double.TryParse((ReminderFontBox.Text ?? "").Trim(), out double rf))
                 _ctx.Settings.ReminderFontSize = Math.Clamp(rf, 10, 48);
             FontSize = _ctx.Settings.UiFontSize;
+            if (MeasureInputBox.SelectedItem is ComboBoxItem mi && mi.Tag?.ToString() is string tag)
+                _ctx.Settings.MeasurementInput = tag;
             _ctx.Settings.DeviceName = (DeviceNameBox.Text ?? "").Trim();
             if (string.IsNullOrWhiteSpace(_ctx.Settings.DeviceName)) _ctx.Settings.DeviceName = Environment.MachineName;
             if (int.TryParse((SyncPortBox.Text ?? "").Trim(), out int port) && port > 0 && port < 65536)

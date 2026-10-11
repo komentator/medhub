@@ -244,6 +244,11 @@
                     <TextBox x:Name="UiFontBox" Width="100"/>
                     <TextBlock Text="Размер шрифта окна напоминания:" FontWeight="Bold" Margin="0,8,0,0"/>
                     <TextBox x:Name="ReminderFontBox" Width="100"/>
+                    <TextBlock Text="Ввод измерений:" FontWeight="Bold" Margin="0,8,0,0"/>
+                    <ComboBox x:Name="MeasureInputBox" Width="320" HorizontalAlignment="Left">
+                        <ComboBoxItem Content="Новое окно (несколько тонометров)" Tag="New" IsSelected="True"/>
+                        <ComboBoxItem Content="Одно окно (по одному)" Tag="Old"/>
+                    </ComboBox>
                     <CheckBox x:Name="AutostartBox" Content="Запускать MedControl вместе с Windows"/>
                     <WrapPanel>
                         <Button Content="Проверить напоминание" Click="OnTestReminder"/>
