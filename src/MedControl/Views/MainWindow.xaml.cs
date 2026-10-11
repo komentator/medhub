@@ -515,7 +515,7 @@ public partial class MainWindow : Window
                     UpdateStatus.Text = $"Доступна версия {info.Version} (у вас {info.Current}).";
                     string sizeTxt = info.Size > 0 ? $" (~{info.Size / 1048576} МБ)" : "";
                     var dr = MessageBox.Show(
-                        $"Доступна версия {info.Version} (установлена {info.Current}){sizeTxt}.\n\n{info.Notes}\n\nСкачать и установить?",
+                        $"Доступна версия {info.Version} (установлена {info.Current}){sizeTxt}.\n\n{info.Notes}\n\nСкачать, установить и перезапустить автоматически?",
                         "MedControl — обновление", MessageBoxButton.YesNo, MessageBoxImage.Information);
                     if (dr != MessageBoxResult.Yes) return;
                     if (!info.Url.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
@@ -538,7 +538,12 @@ public partial class MainWindow : Window
                                         : $"Загрузка… {got / 1048576} МБ"));
                             Dispatcher.Invoke(() =>
                             {
-                                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dest) { UseShellExecute = true }); }
+                                UpdateStatus.Text = "Установка…";
+                                try
+                                {
+                                    // Тихая установка без окон; после неё установщик сам запустит программу.
+                                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dest, "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES") { UseShellExecute = true });
+                                }
                                 catch (Exception ex) { MessageBox.Show("Не удалось запустить установку: " + ex.Message); return; }
                                 AllowClose = true;
                                 Application.Current.Shutdown();

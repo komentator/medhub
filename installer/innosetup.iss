@@ -1,6 +1,6 @@
 ; MedControl Inno Setup installer (§46)
 #define MyAppName "MedControl"
-#define MyAppVersion "1.0.6"
+#define MyAppVersion "1.0.8"
 #define MyAppExe "MedControl.exe"
 
 [Setup]
@@ -10,7 +10,7 @@ AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\MedControl
 DefaultGroupName=MedControl
 OutputDir=..\installer\output
-OutputBaseFilename=MedControl_Setup_1.0.6
+OutputBaseFilename=MedControl_Setup_1.0.8
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
@@ -31,7 +31,7 @@ Name: "{autodesktop}\MedControl"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopi
 Name: desktopicon; Description: "Создать значок на рабочем столе"
 
 [Run]
-Filename: "{app}\{#MyAppExe}"; Description: "Запустить MedControl"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExe}"; Description: "Запустить MedControl"; Flags: nowait postinstall
 
 [Code]
 function InitializeUninstall(): Boolean;
