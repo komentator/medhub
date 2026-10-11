@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _ctx = ctx;
+        Title = $"MedControl {UpdateCheck.Current()}";
         _vm = new MainViewModel(ctx);
         VolumeSlider.ValueChanged += (_, _) => VolumeLabel.Text = $"{(int)VolumeSlider.Value}%";
         // Тултипы графиков кириллическим шрифтом (иначе Skia рисует «квадратики»),
@@ -512,8 +513,9 @@ public partial class MainWindow : Window
                         return;
                     }
                     UpdateStatus.Text = $"Доступна версия {info.Version} (у вас {info.Current}).";
+                    string sizeTxt = info.Size > 0 ? $" (~{info.Size / 1048576} МБ)" : "";
                     var dr = MessageBox.Show(
-                        $"Доступна версия {info.Version} (установлена {info.Current}).\n\n{info.Notes}\n\nСкачать и установить?",
+                        $"Доступна версия {info.Version} (установлена {info.Current}){sizeTxt}.\n\n{info.Notes}\n\nСкачать и установить?",
                         "MedControl — обновление", MessageBoxButton.YesNo, MessageBoxImage.Information);
                     if (dr != MessageBoxResult.Yes) return;
                     if (!info.Url.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
@@ -528,7 +530,12 @@ public partial class MainWindow : Window
                         try
                         {
                             var dest = Path.Combine(Path.GetTempPath(), $"MedControl_Setup_{info.Version}.exe");
-                            await _ctx.Updates.DownloadAsync(info.Url, dest);
+                            await _ctx.Updates.DownloadWithResumeAsync(info.Url, dest,
+                                info.Size > 0 ? info.Size : null,
+                                (got, total) => Dispatcher.Invoke(() =>
+                                    UpdateStatus.Text = total != null && total > 0
+                                        ? $"Загрузка… {got / 1048576} из {total / 1048576} МБ"
+                                        : $"Загрузка… {got / 1048576} МБ"));
                             Dispatcher.Invoke(() =>
                             {
                                 try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dest) { UseShellExecute = true }); }
@@ -537,7 +544,20 @@ public partial class MainWindow : Window
                                 Application.Current.Shutdown();
                             });
                         }
-                        catch (Exception ex) { Dispatcher.Invoke(() => UpdateStatus.Text = "Ошибка загрузки: " + ex.Message); }
+                        catch (Exception ex)
+                        {
+                            Dispatcher.Invoke(() =>
+                            {
+                                UpdateStatus.Text = "Ошибка загрузки: " + ex.Message;
+                                if (MessageBox.Show("Не скачалось автоматически:\n" + ex.Message +
+                                    "\n\nОткрыть страницу загрузки в браузере?",
+                                    "MedControl — обновление", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+                                {
+                                    try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(info.Url) { UseShellExecute = true }); }
+                                    catch (Exception ex2) { MessageBox.Show("Не удалось открыть: " + ex2.Message); }
+                                }
+                            });
+                        }
                     });
                 });
             }
