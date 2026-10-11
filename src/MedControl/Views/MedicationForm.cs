@@ -186,8 +186,8 @@ public sealed class MedicationForm : Window
         var pick = new Button { Content = "Выбрать…", Margin = new Thickness(8, 0, 0, 0) };
         pick.Click += (_, _) =>
         {
-            var dlg = new OpenFileDialog { Filter = "Изображения|*.jpg;*.jpeg;*.png;*.bmp;*.webp" };
-            if (dlg.ShowDialog() == true) { setNew(dlg.FileName); PaintPhotoLabels(); }
+            var dlg = new OpenFileDialog { Filter = "Изображения|*.jpg;*.jpeg;*.png;*.bmp;*.webp", InitialDirectory = FileDlg.InitialDir(_ctx), RestoreDirectory = true, CheckFileExists = true };
+            if (dlg.ShowDialog(this) == true) { FileDlg.Remember(_ctx, dlg.FileName); setNew(dlg.FileName); PaintPhotoLabels(); }
         };
         var view = new Button { Content = "Просмотр", Margin = new Thickness(8, 0, 0, 0) };
         view.Click += (_, _) =>

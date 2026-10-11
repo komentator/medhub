@@ -69,4 +69,5 @@ public sealed class SettingsService
     public bool PendingInitialSync { get => GetBool("PendingInitialSync", false); set => Set("PendingInitialSync", value.ToString()); }
     public string MeasurementInput { get => Get("MeasurementInput", "New"); set => Set("MeasurementInput", value); }
     public string ExcelComparePath { get => Get("ExcelComparePath", ""); set => Set("ExcelComparePath", value); }
+    public string LastFileDir { get => Get("LastFileDir", ""); set => Set("LastFileDir", value); }
 }

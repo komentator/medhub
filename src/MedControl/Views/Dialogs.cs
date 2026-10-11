@@ -73,8 +73,8 @@ public sealed class WizardWindow : Window
         var pick = new Button { Content = "Выбрать файл переноса…", HorizontalAlignment = HorizontalAlignment.Left };
         pick.Click += (_, _) =>
         {
-            var dlg = new OpenFileDialog { Filter = "Перенос MedControl (*.mcpack)|*.mcpack" };
-            if (dlg.ShowDialog() == true) { _packFile = dlg.FileName; PaintPack(); }
+            var dlg = new OpenFileDialog { Filter = "Перенос MedControl (*.mcpack)|*.mcpack", InitialDirectory = FileDlg.InitialDir(_ctx), RestoreDirectory = true, CheckFileExists = true };
+            if (dlg.ShowDialog(this) == true) { FileDlg.Remember(_ctx, dlg.FileName); _packFile = dlg.FileName; PaintPack(); }
         };
         p.Children.Add(pick);
         _packLabel.TextWrapping = TextWrapping.Wrap;

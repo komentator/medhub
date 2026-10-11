@@ -390,9 +390,12 @@ public partial class MainWindow : Window
     // ---------- Excel / PDF ----------
     private void OnExportExcel(object s, RoutedEventArgs e)
     {
-        var dlg = new SaveFileDialog { Filter = "Excel (*.xlsx)|*.xlsx", FileName = "medcontrol.xlsx" };
-        if (dlg.ShowDialog() == true)
+        var dlg = new SaveFileDialog { Filter = "Excel (*.xlsx)|*.xlsx", FileName = "medcontrol.xlsx", InitialDirectory = FileDlg.InitialDir(_ctx), RestoreDirectory = true };
+        _ctx.Log.Write("UI", "Диалог сохранения Excel открыт");
+        if (dlg.ShowDialog(this) == true)
         {
+            _ctx.Log.Write("UI", "Диалог сохранения Excel закрыт: OK");
+            FileDlg.Remember(_ctx, dlg.FileName);
             try
             {
                 _ctx.Excel.Export(dlg.FileName, DateTime.Now.AddDays(-30), DateTime.Now.AddDays(1), true, true, true, true);
@@ -400,12 +403,16 @@ public partial class MainWindow : Window
             }
             catch (Exception ex) { MessageBox.Show("Ошибка экспорта: " + ex.Message); }
         }
+        else _ctx.Log.Write("UI", "Диалог сохранения Excel закрыт: отмена");
     }
     private void OnImportExcel(object s, RoutedEventArgs e)
     {
-        var dlg = new OpenFileDialog { Filter = "Excel (*.xlsx)|*.xlsx" };
-        if (dlg.ShowDialog() == true)
+        var dlg = new OpenFileDialog { Filter = "Excel (*.xlsx)|*.xlsx", InitialDirectory = FileDlg.InitialDir(_ctx), RestoreDirectory = true, CheckFileExists = true };
+        _ctx.Log.Write("UI", "Диалог импорта Excel открыт");
+        if (dlg.ShowDialog(this) == true)
         {
+            _ctx.Log.Write("UI", "Диалог импорта Excel закрыт: OK");
+            FileDlg.Remember(_ctx, dlg.FileName);
             try
             {
                 var (imp, skip) = _ctx.Excel.Import(dlg.FileName);
@@ -414,11 +421,12 @@ public partial class MainWindow : Window
             }
             catch (Exception ex) { MessageBox.Show("Ошибка импорта: " + ex.Message); }
         }
+        else _ctx.Log.Write("UI", "Диалог импорта Excel закрыт: отмена");
     }
     private void OnBrowseCompare(object s, RoutedEventArgs e)
     {
-        var dlg = new OpenFileDialog { Filter = "Excel (*.xlsx)|*.xlsx" };
-        if (dlg.ShowDialog() == true) ExcelCompareBox.Text = dlg.FileName;
+        var dlg = new OpenFileDialog { Filter = "Excel (*.xlsx)|*.xlsx", InitialDirectory = FileDlg.InitialDir(_ctx), RestoreDirectory = true, CheckFileExists = true };
+        if (dlg.ShowDialog(this) == true) { FileDlg.Remember(_ctx, dlg.FileName); ExcelCompareBox.Text = dlg.FileName; }
     }
     private void OnClearCompare(object s, RoutedEventArgs e) => ExcelCompareBox.Text = "";
     private void OnCompareExcel(object s, RoutedEventArgs e)
@@ -449,9 +457,10 @@ public partial class MainWindow : Window
     }
     private void OnExcelTemplate(object s, RoutedEventArgs e)
     {
-        var dlg = new SaveFileDialog { Filter = "Excel (*.xlsx)|*.xlsx", FileName = "medcontrol_template.xlsx" };
-        if (dlg.ShowDialog() == true)
+        var dlg = new SaveFileDialog { Filter = "Excel (*.xlsx)|*.xlsx", FileName = "medcontrol_template.xlsx", InitialDirectory = FileDlg.InitialDir(_ctx), RestoreDirectory = true };
+        if (dlg.ShowDialog(this) == true)
         {
+            FileDlg.Remember(_ctx, dlg.FileName);
             try
             {
                 _ctx.Excel.CreateTemplate(dlg.FileName);
@@ -627,8 +636,8 @@ public partial class MainWindow : Window
     }
     private void OnChangeBackupDir(object s, RoutedEventArgs e)
     {
-        var dlg = new OpenFolderDialog { Title = "Папка резервных копий" };
-        if (dlg.ShowDialog() == true)
+        var dlg = new OpenFolderDialog { Title = "Папка резервных копий", InitialDirectory = FileDlg.InitialDir(_ctx) };
+        if (dlg.ShowDialog(this) == true)
         {
             _ctx.Backups.ChangeDirectory(dlg.FolderName);
             SettingsStatus.Text = "Папка backup: " + dlg.FolderName;
@@ -735,8 +744,9 @@ public partial class MainWindow : Window
         var ip = Steps.AskText(this, "Перенос базы", "IP-адрес ЭТОГО (ведущего) компьютера для файла переноса:",
             ips.FirstOrDefault() ?? "", allowEmpty: false);
         if (ip == null) return;
-        var dlg = new SaveFileDialog { Filter = "Перенос MedControl (*.mcpack)|*.mcpack", FileName = $"medcontrol_perenos_{DateTime.Now:yyyy-MM-dd}.mcpack" };
-        if (dlg.ShowDialog() != true) return;
+        var dlg = new SaveFileDialog { Filter = "Перенос MedControl (*.mcpack)|*.mcpack", FileName = $"medcontrol_perenos_{DateTime.Now:yyyy-MM-dd}.mcpack", InitialDirectory = FileDlg.InitialDir(_ctx), RestoreDirectory = true };
+        if (dlg.ShowDialog(this) != true) return;
+        FileDlg.Remember(_ctx, dlg.FileName);
         var (ok, msg) = _ctx.Transfer.CreatePack(ip.Trim(), dlg.FileName);
         MessageBox.Show(msg, "MedControl", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Error);
     }

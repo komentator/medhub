@@ -12,8 +12,42 @@ using ScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility;
 using MessageBox = System.Windows.MessageBox;
 using FontWeights = System.Windows.FontWeights;
 using TextWrapping = System.Windows.TextWrapping;
+using MedControl.ViewModels;
 
 namespace MedControl.Views;
+
+// Безопасные файловые диалоги: владелец (модальность), стартовая папка,
+// запоминание последней папки, запись в журнал (диагностика зависаний).
+public static class FileDlg
+{
+    public static string InitialDir(AppServices ctx)
+    {
+        try
+        {
+            var d = ctx.Settings.LastFileDir;
+            if (!string.IsNullOrWhiteSpace(d) && System.IO.Directory.Exists(d)) return d;
+        }
+        catch { }
+        try
+        {
+            var docs = System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments);
+            if (System.IO.Directory.Exists(docs)) return docs;
+        }
+        catch { }
+        return AppDomain.CurrentDomain.BaseDirectory;
+    }
+
+    public static void Remember(AppServices ctx, string? file)
+    {
+        try
+        {
+            var d = System.IO.Path.GetDirectoryName(file ?? "");
+            if (!string.IsNullOrEmpty(d) && System.IO.Directory.Exists(d))
+                ctx.Settings.LastFileDir = d;
+        }
+        catch { }
+    }
+}
 
 // Пошаговый ввод: каждый параметр — отдельное окно поверх вызывающего.
 // Все окна Topmost + Owner, крупный шрифт, без ручного ввода форматов:
