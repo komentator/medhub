@@ -31,7 +31,7 @@
 Готовый установщик собирается из `installer/innosetup.iss` (Inno Setup 6):
 
 ```text
-installer\output\MedControl_Setup_1.0.0.exe
+installer\output\MedControl_Setup_X.Y.Z.exe
 ```
 
 При удалении программы установщик спрашивает, удалять ли данные.
