@@ -1,6 +1,6 @@
 ; MedControl Inno Setup installer (§46)
 #define MyAppName "MedControl"
-#define MyAppVersion "1.1.6"
+#define MyAppVersion "1.1.7"
 #define MyAppExe "MedControl.exe"
 
 [Setup]
@@ -10,7 +10,7 @@ AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\MedControl
 DefaultGroupName=MedControl
 OutputDir=..\installer\output
-OutputBaseFilename=MedControl_Setup_1.1.6
+OutputBaseFilename=MedControl_Setup_1.1.7
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible

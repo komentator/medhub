@@ -103,14 +103,15 @@ public sealed class MainViewModel : ObservableObject
         return res.ToArray();
     }
 
-    // Снизу только целые номера замеров (0, 1, 2…); дробные убраны шагом MinStep=1.
+    // Снизу только целые номера (шаг MinStep=1, без принудительного шага —
+    // иначе метки слипаются; MinLimit=0 убирает «-1» слева).
     // ВАЖНО: у каждого графика СВОЙ экземпляр оси — общий ломает отрисовку.
     public static Axis[] NewXAxes() => [new Axis
     {
         LabelsPaint = new SolidColorPaint(SKColors.Gray),
         TextSize = 12,
         MinStep = 1,
-        ForceStepToMin = true,
+        MinLimit = 0,
     }];
 
     public void Refresh()
