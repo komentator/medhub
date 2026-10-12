@@ -582,13 +582,11 @@ public partial class MainWindow : Window
     }
     private void OnQuickPrint(object s, RoutedEventArgs e)
     {
-        int idx = Steps.AskChoiceIndex(this, "Печать", "Что печатать?",
-            ["Измерения давления", "Приём лекарств", "Совместный отчёт"]);
-        if (idx < 0) return;
-        string kind = idx switch { 1 => "intakes", 2 => "joint", _ => "measurements" };
+        var res = QuickPrintDialog.Show(this);
+        if (res == null) return;
         try
         {
-            var path = _ctx.Reports.BuildPdf(DateTime.Now.AddDays(-30), DateTime.Now, false, 11, kind);
+            var path = _ctx.Reports.BuildPdf(res.From, res.To, false, 11, res.Kind, res.Charts);
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
         }
         catch (Exception ex) { MessageBox.Show("Ошибка отчёта: " + ex.Message); }
