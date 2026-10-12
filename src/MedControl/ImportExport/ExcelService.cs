@@ -12,9 +12,10 @@ public sealed class ExcelService
     private readonly MeasurementRepository _meas;
     private readonly IntakeRepository _intakes;
     private readonly WellBeingRepository _wb;
+    private readonly MedicationRepository _meds;
     private readonly LogService _log;
-    public ExcelService(MeasurementRepository meas, IntakeRepository intakes, WellBeingRepository wb, LogService log)
-    { _meas = meas; _intakes = intakes; _wb = wb; _log = log; }
+    public ExcelService(MeasurementRepository meas, IntakeRepository intakes, WellBeingRepository wb, MedicationRepository meds, LogService log)
+    { _meas = meas; _intakes = intakes; _wb = wb; _meds = meds; _log = log; }
 
     public void Export(string file, DateTime from, DateTime to, bool meas, bool intakes, bool wb, bool summary)
     {
@@ -91,16 +92,124 @@ public sealed class ExcelService
     // Возвращает (импортировано, пропущено): пропущены дубликаты и битые строки.
     public (int Imported, int Skipped) Import(string file)
     {
+        var (m, s, _, _) = ImportAll(file);
+        return (m, s);
+    }
+
+    // Полный импорт: замеры + лекарства (лист «Лекарства»).
+    public (int Meas, int MeasSkip, int Meds, int MedsSkip) ImportAll(string file)
+    {
         try
         {
             using var book = new XLWorkbook(file);
+            var (m, s) = (0, 0);
             var ws = PickSheet(book);
-            if (ws == null) return (0, 0);
-            if (IsVertical(ws)) return ImportVertical(ws);
-            if (IsDiary(ws)) return ImportDiary(ws);
-            return (0, 0);
+            if (ws != null)
+            {
+                if (IsVertical(ws)) (m, s) = ImportVertical(ws);
+                else if (IsDiary(ws)) (m, s) = ImportDiary(ws);
+            }
+            var (md, ms) = ImportMedications(book, Path.GetDirectoryName(file) ?? "");
+            return (m, s, md, ms);
         }
         catch (Exception ex) { _log.Write("Import", ex.Message); throw; }
+    }
+
+    // Лист «Лекарства»: Название | Назначение | ФотоУпаковки | ФотоТаблетки | ФотоИнструкции | ИнструкцияТекст.
+    // Новое — создаётся (без расписания, задаётся в карточке), существующее — обновляются
+    // описание/инструкции/фото (расписание и дозы не трогаем). Фото — пути к файлам.
+    public (int Imported, int Skipped) ImportMedications(XLWorkbook book, string baseDir)
+    {
+        int nm = 0, skip = 0;
+        try
+        {
+            if (!book.TryGetWorksheet("Лекарства", out var ws) || !ws.RowsUsed().Any()) return (0, 0);
+            var rows = ws.RowsUsed().ToList();
+            int h = rows.FindIndex(r => (r.Cell(1).GetString() ?? "").Trim().Equals("название", StringComparison.OrdinalIgnoreCase));
+            if (h < 0) return (0, 0);
+            var all = _meds.GetAll().ToDictionary(m => m.Name.Trim().ToLowerInvariant(), m => m);
+            foreach (var r in rows.Skip(h + 1))
+            {
+                try
+                {
+                    string name = (r.Cell(1).GetString() ?? "").Trim();
+                    if (name == "") continue; // пустая строка — молча
+                    if (name.Length > 100) { skip++; continue; }
+                    string desc = r.Cell(2).GetString() ?? "";
+                    string instr = r.Cell(6).GetString() ?? "";
+                    if (all.TryGetValue(name.ToLowerInvariant(), out var m))
+                    {
+                        if (!string.IsNullOrWhiteSpace(desc)) m.Description = desc.Trim();
+                        if (!string.IsNullOrWhiteSpace(instr)) m.InstructionText = instr.Trim();
+                        m.PhotoPackPath = PhotoOrKeep(baseDir, Txt(r.Cell(3)), m.PhotoPackPath);
+                        m.PhotoPillPath = PhotoOrKeep(baseDir, Txt(r.Cell(4)), m.PhotoPillPath);
+                        m.PhotoInstructionPath = PhotoOrKeep(baseDir, Txt(r.Cell(5)), m.PhotoInstructionPath);
+                        _meds.Save(m);
+                        nm++;
+                    }
+                    else
+                    {
+                        var fresh = new Medication
+                        {
+                            Name = name,
+                            Description = desc?.Trim() ?? "",
+                            InstructionText = instr?.Trim() ?? "",
+                            IsActive = true,
+                            Mode = ScheduleMode.Daily,
+                            PhotoPackPath = ImportPhotoFile(baseDir, Txt(r.Cell(3))),
+                            PhotoPillPath = ImportPhotoFile(baseDir, Txt(r.Cell(4))),
+                            PhotoInstructionPath = ImportPhotoFile(baseDir, Txt(r.Cell(5))),
+                        };
+                        _meds.Save(fresh);
+                        all[name.ToLowerInvariant()] = fresh;
+                        nm++;
+                    }
+                }
+                catch (Exception ex) { _log.Write("Import", ex.Message); skip++; }
+            }
+        }
+        catch (Exception ex) { _log.Write("Import", ex.Message); throw; }
+        return (nm, skip);
+    }
+
+    // Путь из ячейки (абсолютный или рядом с xlsx) → копия в хранилище; "" — оставить как было.
+    private string PhotoOrKeep(string baseDir, string cell, string current)
+    {
+        if (string.IsNullOrWhiteSpace(cell)) return current ?? "";
+        var imported = ImportPhotoFile(baseDir, cell);
+        if (string.IsNullOrEmpty(imported)) return current ?? "";
+        if (!string.IsNullOrEmpty(current))
+        {
+            try
+            {
+                var full = Path.Combine(Data.Paths.PhotosDir, current);
+                if (File.Exists(full)) File.Delete(full);
+            }
+            catch (Exception ex) { _log.Write("Import", ex.Message); }
+        }
+        return imported;
+    }
+
+    private string ImportPhotoFile(string baseDir, string cell)
+    {
+        try
+        {
+            cell = (cell ?? "").Trim().Trim('"');
+            if (cell == "") return "";
+            string full = Path.IsPathRooted(cell) ? cell : Path.Combine(baseDir, cell);
+            if (!File.Exists(full) || !PhotoExt(full)) return "";
+            Data.Paths.EnsureAll();
+            string name = Guid.NewGuid().ToString("N") + Path.GetExtension(full).ToLowerInvariant();
+            File.Copy(full, Path.Combine(Data.Paths.PhotosDir, name));
+            return name;
+        }
+        catch (Exception ex) { _log.Write("Import", ex.Message); return ""; }
+    }
+
+    private static bool PhotoExt(string path)
+    {
+        var e = Path.GetExtension(path).ToLowerInvariant();
+        return e is ".jpg" or ".jpeg" or ".png" or ".bmp" or ".webp";
     }
 
     private static IXLWorksheet? PickSheet(XLWorkbook book)
@@ -446,7 +555,7 @@ public sealed class ExcelService
         {
             var tmpDb = new Data.Db(tmp);
             var tmpSvc = new ExcelService(new MeasurementRepository(tmpDb), new IntakeRepository(tmpDb),
-                new WellBeingRepository(tmpDb), _log);
+                new WellBeingRepository(tmpDb), new MedicationRepository(tmpDb), _log);
             var (imp, skip) = tmpSvc.Import(file);
             _ = imp;
             var fileRows = new MeasurementRepository(tmpDb)
@@ -472,6 +581,50 @@ public sealed class ExcelService
         {
             try { File.Delete(tmp); File.Delete(tmp + "-wal"); File.Delete(tmp + "-shm"); } catch { }
         }
+    }
+
+    // Разбор TSV из буфера обмена (копия куска Excel): строки → ячейки.
+    public static List<List<string>> ParseTsv(string text)
+    {
+        var res = new List<List<string>>();
+        foreach (var line in (text ?? "").Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var cells = line.Split('\t').Select(c => c.Trim()).ToList();
+            while (cells.Count > 0 && cells[^1] == "") cells.RemoveAt(cells.Count - 1);
+            if (cells.Count > 0) res.Add(cells);
+        }
+        return res;
+    }
+
+    // Вставка скопированного куска таблицы: TSV → временный xlsx → обычный импорт.
+    public (int Meas, int MeasSkip, int Meds, int MedsSkip) PasteFromClipboard(string text)
+    {
+        var rows = ParseTsv(text);
+        if (rows.Count == 0) return (0, 0, 0, 0);
+        string tmp = Path.Combine(Path.GetTempPath(), $"mc_paste_{Guid.NewGuid():N}.xlsx");
+        try
+        {
+            using (var book = new XLWorkbook())
+            {
+                var ws = book.Worksheets.Add("Измерения");
+                for (int r = 0; r < rows.Count; r++)
+                {
+                    for (int c = 0; c < rows[r].Count && c < 20; c++)
+                    {
+                        string v = rows[r][c];
+                        if (double.TryParse(v.Replace(',', '.'),
+                                System.Globalization.NumberStyles.Any,
+                                System.Globalization.CultureInfo.InvariantCulture, out double d))
+                            ws.Cell(r + 1, c + 1).Value = d;
+                        else
+                            ws.Cell(r + 1, c + 1).Value = v;
+                    }
+                }
+                book.SaveAs(tmp);
+            }
+            return ImportAll(tmp);
+        }
+        finally { try { File.Delete(tmp); } catch { } }
     }
 
     // Шаблон блочного дневника: слева Тонометр 1, справа Тонометр 2.
@@ -503,11 +656,21 @@ public sealed class ExcelService
                 ws.Range($"{col}3:{col}1000").SetDataValidation().WholeNumber.Between(0, 250);
         }
         catch (Exception ex) { _log.Write("Template", ex.Message); }
+        var meds = book.Worksheets.Add("Лекарства");
+        string[] mh = ["Название", "Назначение", "ФотоУпаковки", "ФотоТаблетки", "ФотоИнструкции", "ИнструкцияТекст"];
+        for (int i = 0; i < mh.Length; i++) meds.Cell(1, i + 1).Value = mh[i];
+        meds.Cell(2, 1).Value = "Пример";
+        meds.Cell(2, 2).Value = "От давления, утром";
+        meds.Cell(2, 6).Value = "1 таблетка утром после еды.";
         var how = book.Worksheets.Add("Как заполнять");
-        how.Cell(1, 1).Value = "Удалите строки-примеры и впишите свои замеры. " +
+        how.Cell(1, 1).Value = "Лист Измерения: удалите строки-примеры и впишите свои замеры. " +
             "Слева — первый тонометр, справа — второй (имена — в первой строке). " +
             "Дата: ДД.ММ.ГГГГ, время: ЧЧ:ММ (общее для обоих). Пустой блок — пропуск. " +
             "Красные ячейки — ошибка ввода. Импорт: Excel/PDF — Импорт.";
+        how.Cell(2, 1).Value = "Лист Лекарства: название (обязательно), назначение, пути к фото " +
+            "(файлы рядом с таблицей или полные пути), инструкция текстом. " +
+            "Новое создаётся без расписания (задаётся в карточке), у существующего " +
+            "обновляются описание/фото/инструкция, расписание не трогаем.";
         book.SaveAs(file);
     }
 }

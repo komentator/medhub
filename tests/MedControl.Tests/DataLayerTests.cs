@@ -105,7 +105,7 @@ public class DataLayerTests : IDisposable
         var intakes = new IntakeRepository(_db);
         var wb = new WellBeingRepository(_db);
         var log = new LogService(_db);
-        var excel = new MedControl.ImportExport.ExcelService(meas, intakes, wb, log);
+        var excel = new MedControl.ImportExport.ExcelService(meas, intakes, wb, new MedicationRepository(_db), log);
         var t = new Tonometer { Name = "Omron X" };
         meas.SaveTonometer(t);
         meas.Upsert(new Measurement

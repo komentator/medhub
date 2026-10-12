@@ -18,7 +18,24 @@ public sealed class ReportService
     public ReportService(MeasurementRepository meas, IntakeRepository intakes, WellBeingRepository wb, LogService log)
     { _meas = meas; _intakes = intakes; _wb = wb; _log = log; }
 
-    public string BuildPdf(DateTime from, DateTime to, bool landscape, int fontSize, string kind)
+    private static void AddChartPage(PdfDocument doc, PdfPage tpl, XImage img)
+    {
+        var pg = doc.AddPage();
+        pg.Size = tpl.Size;
+        pg.Orientation = tpl.Orientation;
+        var g = XGraphics.FromPdfPage(pg);
+        double maxW = pg.Width.Point - 80;
+        double h = maxW * img.PixelHeight / Math.Max(1, img.PixelWidth);
+        double maxH = pg.Height.Point - 80;
+        if (h > maxH)
+        {
+            maxW *= maxH / h;
+            h = maxH;
+        }
+        g.DrawImage(img, 40, 40, maxW, h);
+    }
+
+    public string BuildPdf(DateTime from, DateTime to, bool landscape, int fontSize, string kind, bool charts = true)
     {
         try
         {
@@ -88,10 +105,32 @@ public sealed class ReportService
             }
             // Самочувствие отдельным разделом (§26)
             Line("Самочувствие:", header, 20);
-            foreach (var w in _wb.GetRange(from, to).Take(40))
+            var wbs = _wb.GetRange(from, to).Take(40).ToList();
+            foreach (var w in wbs)
             {
                 if (y > page.Height.Point - 60) break;
                 Line($"{w.CreatedAt:yyyy-MM-dd HH:mm} — {w.Score}/10" + (string.IsNullOrWhiteSpace(w.Comment) ? "" : $" ({w.Comment})"), small);
+            }
+            if (charts)
+            {
+                var streams = new List<MemoryStream>();
+                try
+                {
+                    XImage Img(byte[] b)
+                    {
+                        var ms = new MemoryStream(b);
+                        streams.Add(ms);
+                        return XImage.FromStream(ms);
+                    }
+                    if (kind is "measurements" or "joint")
+                    {
+                        var allMeas = _meas.GetRange(from, to).OrderBy(m => m.TakenAt).ToList();
+                        AddChartPage(doc, page, Img(ChartImage.Pressure(allMeas)));
+                    }
+                    AddChartPage(doc, page, Img(ChartImage.WellBeing(_wb.GetRange(from, to).ToList())));
+                }
+                catch (Exception ex) { _log.Write("PDF", "Charts: " + ex.Message); }
+                finally { foreach (var s in streams) try { s.Dispose(); } catch { } }
             }
             var path = Path.Combine(Paths.ReportDir, $"medkontrol_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.pdf");
             doc.Save(path);

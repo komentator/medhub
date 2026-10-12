@@ -168,6 +168,7 @@ public static class UnplannedWizard
         row.Children.Add(cancel);
         p.Children.Add(row);
         w.Content = p;
+        UiTips.Apply(w);
         w.ShowDialog();
         return result;
     }
@@ -296,6 +297,7 @@ public static class IntakeDetails
         row.Children.Add(close);
         p.Children.Add(row);
         w.Content = p;
+        UiTips.Apply(w);
         if (w.ShowDialog() == true) Steps.Msg(owner, "Комментарий сохранён.");
     }
 
@@ -337,6 +339,7 @@ public static class IntakeDetails
         close.Click += (_, _) => w.DialogResult = false;
         p.Children.Add(close);
         w.Content = p;
+        UiTips.Apply(w);
         w.ShowDialog();
     }
 }

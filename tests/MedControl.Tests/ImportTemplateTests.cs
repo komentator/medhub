@@ -15,7 +15,7 @@ public class ImportTemplateTests : IDisposable
         var db = new Db(Path.Combine(_dir, "t.db"));
         var excel = new MedControl.ImportExport.ExcelService(
             new MeasurementRepository(db), new IntakeRepository(db),
-            new WellBeingRepository(db), new LogService(db));
+            new WellBeingRepository(db), new MedicationRepository(db), new LogService(db));
         var file = Path.Combine(_dir, "tpl.xlsx");
         excel.CreateTemplate(file);
         Assert.True(File.Exists(file));
@@ -37,7 +37,7 @@ public class ImportTemplateTests : IDisposable
         var db = new Db(Path.Combine(_dir, "d.db"));
         var excel = new MedControl.ImportExport.ExcelService(
             new MeasurementRepository(db), new IntakeRepository(db),
-            new WellBeingRepository(db), new LogService(db));
+            new WellBeingRepository(db), new MedicationRepository(db), new LogService(db));
         var file = Path.Combine(_dir, "messy.xlsx");
         using (var book = new ClosedXML.Excel.XLWorkbook())
         {
@@ -71,7 +71,7 @@ public class ImportTemplateTests : IDisposable
         var meas = new MeasurementRepository(db);
         var excel = new MedControl.ImportExport.ExcelService(
             meas, new IntakeRepository(db),
-            new WellBeingRepository(db), new LogService(db));
+            new WellBeingRepository(db), new MedicationRepository(db), new LogService(db));
         var t = new MedControl.Models.Tonometer { Name = "T" };
         meas.SaveTonometer(t);
         meas.Upsert(new MedControl.Models.Measurement
@@ -104,6 +104,66 @@ public class ImportTemplateTests : IDisposable
         Assert.Equal(2, r.DbTotal);
     }
 
+    [Fact] public void Meds_Import_Creates_And_Updates()
+    {
+        Directory.CreateDirectory(_dir);
+        var db = new Db(Path.Combine(_dir, "m.db"));
+        var meas = new MeasurementRepository(db);
+        meas.SaveTonometer(new MedControl.Models.Tonometer { Name = "T" });
+        var meds = new MedicationRepository(db);
+        meds.Save(new MedControl.Models.Medication { Name = "Старое", Mode = MedControl.Models.ScheduleMode.Daily });
+        var excel = new MedControl.ImportExport.ExcelService(
+            meas, new IntakeRepository(db),
+            new WellBeingRepository(db), new MedicationRepository(db), new LogService(db));
+        var file = Path.Combine(_dir, "meds.xlsx");
+        using (var book = new ClosedXML.Excel.XLWorkbook())
+        {
+            var ws = book.Worksheets.Add("Лекарства");
+            foreach (var (c, v) in new[] { (1, "Название"), (2, "Назначение"), (6, "ИнструкцияТекст") })
+                ws.Cell(1, c).Value = v;
+            ws.Cell(2, 1).Value = "Новое";
+            ws.Cell(2, 2).Value = "От головы";
+            ws.Cell(2, 6).Value = "Пить воду.";
+            ws.Cell(3, 1).Value = "Старое";
+            ws.Cell(3, 2).Value = "Обновлено";
+            ws.Cell(4, 1).Value = "";
+            book.SaveAs(file);
+        }
+        var (md, ms) = excel.ImportMedications(
+            new ClosedXML.Excel.XLWorkbook(file), Path.GetDirectoryName(file)!);
+        Assert.Equal(2, md);
+        Assert.Equal(0, ms);
+        var all = meds.GetAll();
+        Assert.Contains(all, m => m.Name == "Новое" && m.Description == "От головы" && m.InstructionText == "Пить воду.");
+        Assert.Contains(all, m => m.Name == "Старое" && m.Description == "Обновлено");
+    }
+
+    [Fact] public void ParseTsv_Splits_Rows()
+    {
+        var rows = MedControl.ImportExport.ExcelService.ParseTsv("a\tb\r\n1\t2\t3\r\n\r\nx\t");
+        Assert.Equal(3, rows.Count);
+        Assert.Equal(new[] { "a", "b" }, rows[0]);
+        Assert.Equal(new[] { "1", "2", "3" }, rows[1]);
+        Assert.Equal(new[] { "x" }, rows[2]);
+    }
+
+    [Fact] public void ChartImage_Renders_Png()
+    {
+        var meas = new List<MedControl.Models.Measurement>
+        {
+            new() { TonometerName = "T", TakenAt = new DateTime(2026, 10, 1, 8, 0, 0), Systolic = 120, Diastolic = 80, Pulse = 70 },
+            new() { TonometerName = "T", TakenAt = new DateTime(2026, 10, 2, 8, 0, 0), Systolic = 125, Diastolic = 82, Pulse = 72 },
+        };
+        var png = MedControl.Reports.ChartImage.Pressure(meas, 400, 200);
+        Assert.True(png.Length > 100);
+        Assert.Equal(new byte[] { 137, 80, 78, 71 }, png.Take(4).ToArray()); // PNG-сигнатура
+        var wb = MedControl.Reports.ChartImage.WellBeing(new List<MedControl.Models.WellBeingRating>
+        {
+            new() { Score = 7, CreatedAt = new DateTime(2026, 10, 1, 8, 0, 0) },
+        }, 400, 200);
+        Assert.True(wb.Length > 100);
+    }
+
     [Fact] public void Diary_Binds_By_Creation_Order_And_Defaults_Time()
     {
         Directory.CreateDirectory(_dir);
@@ -113,7 +173,7 @@ public class ImportTemplateTests : IDisposable
         meas.SaveTonometer(new MedControl.Models.Tonometer { Name = "AAA-second" });
         var excel = new MedControl.ImportExport.ExcelService(
             meas, new IntakeRepository(db),
-            new WellBeingRepository(db), new LogService(db));
+            new WellBeingRepository(db), new MedicationRepository(db), new LogService(db));
         var file = Path.Combine(_dir, "order.xlsx");
         using (var book = new ClosedXML.Excel.XLWorkbook())
         {

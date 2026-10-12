@@ -8,6 +8,7 @@ using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using OpenFolderDialog = Microsoft.Win32.OpenFolderDialog;
 using Application = System.Windows.Application;
+using FontWeights = System.Windows.FontWeights;
 using MedControl.Models;
 using MedControl.ViewModels;
 using MedControl.Services;
@@ -22,6 +23,7 @@ public partial class MainWindow : Window
     public MainWindow(AppServices ctx)
     {
         InitializeComponent();
+        UiTips.Apply(this);
         _ctx = ctx;
         Title = $"MedControl {UpdateCheck.Short(UpdateCheck.Current())}";
         _vm = new MainViewModel(ctx);
@@ -70,6 +72,9 @@ public partial class MainWindow : Window
             if (it is ComboBoxItem ci && ci.Tag?.ToString() == _ctx.Settings.MeasurementInput)
             { MeasureInputBox.SelectedItem = it; break; }
         ExcelCompareBox.Text = _ctx.Settings.ExcelComparePath;
+        ReportAnchorBox.SelectedDate = DateTime.Now;
+        ReportFromBox.SelectedDate = DateTime.Now.AddDays(-30);
+        ReportToBox.SelectedDate = DateTime.Now;
         DeviceNameBox.Text = _ctx.Settings.DeviceName;
         SyncServerBox.IsChecked = _ctx.Settings.SyncServerEnabled;
         SyncPortBox.Text = _ctx.Settings.SyncPort.ToString();
@@ -78,11 +83,47 @@ public partial class MainWindow : Window
         DeviceIdBox.Text = $"ID: {_ctx.Settings.DeviceId}\nIP этого ПК: {string.Join(", ", MedControl.Sync.SyncService.GetLocalIps())}";
     }
 
+    // Колокольчик: число активных + пропущенных за сегодня; красный, если есть.
+    private void RefreshBell()
+    {
+        if (BellButton == null) return;
+        try
+        {
+            var now = DateTime.Now;
+            int active = _ctx.Reminders.GetActive(now).Count;
+            int missed = _ctx.Intakes.GetRange(now.Date, now.Date.AddDays(1))
+                .Count(i => i.Status == IntakeStatus.Missed);
+            int n = active + missed + _ctx.Reminders.SnoozedCount;
+            BellButton.Content = n > 0 ? $"🔔 {n}" : "🔔";
+            BellButton.Foreground = n > 0
+                ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red)
+                : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Gray);
+            BellButton.FontWeight = n > 0 ? FontWeights.Bold : FontWeights.Normal;
+            BellButton.ToolTip = n == 0 ? "Напоминания: нет активных"
+                : $"Активных: {active}, пропущено сегодня: {missed}, отложено: {_ctx.Reminders.SnoozedCount}. Нажмите для списка.";
+        }
+        catch { }
+    }
+    private void OnBell(object s, RoutedEventArgs e)
+    {
+        var now = DateTime.Now;
+        var lines = new List<string>();
+        foreach (var d in _ctx.Reminders.GetActive(now).OrderBy(x => x.ScheduledAt))
+            lines.Add($"{d.ScheduledAt:HH:mm} — {d.MedicationName} ({d.Dosage}) — ждёт");
+        foreach (var i in _ctx.Intakes.GetRange(now.Date, now.Date.AddDays(1))
+                     .Where(i => i.Status == IntakeStatus.Missed).OrderBy(i => i.ScheduledAt))
+            lines.Add($"{i.ScheduledAt:HH:mm} — {i.MedicationName} ({i.Dosage}) — пропущено");
+        Steps.Msg(this, lines.Count == 0 ? "Нет активных напоминаний." : string.Join("\n", lines));
+    }
+
     public void RefreshAll()
     {
         _vm.Refresh();
         TodayBox.Text = _vm.TodayText;
         StatsBox.Text = _vm.Stats;
+        // Запоминаем зум пользователя, чтобы обновление данных его не сбрасывало.
+        var zooms = new[] { SysChart, DiaChart, PulseChart, WbChart }
+            .ToDictionary(ch => ch, ch => (Min: ch.XAxes.FirstOrDefault()?.MinLimit, Max: ch.XAxes.FirstOrDefault()?.MaxLimit));
         SysChart.Series = _vm.SysSeries;
         DiaChart.Series = _vm.DiaSeries;
         PulseChart.Series = _vm.PulseSeries;
@@ -91,10 +132,20 @@ public partial class MainWindow : Window
         DiaChart.XAxes = MainViewModel.NewXAxes();
         PulseChart.XAxes = MainViewModel.NewXAxes();
         WbChart.XAxes = MainViewModel.NewXAxes();
+        foreach (var (ch, z) in zooms)
+        {
+            var ax = ch.XAxes.FirstOrDefault();
+            if (ax != null && z.Min != null && z.Max != null && z.Max > z.Min)
+            {
+                ax.MinLimit = z.Min;
+                ax.MaxLimit = z.Max;
+            }
+        }
         OnRefreshMeas(null, null);
         OnRefreshIntakes(null, null);
         OnRefreshWb(null, null);
         OnRefreshTrash(null, null);
+        RefreshBell();
         RefreshTonos();
         RefreshMeds();
         OnRefreshInstructions(null, null);
@@ -415,8 +466,10 @@ public partial class MainWindow : Window
             FileDlg.Remember(_ctx, dlg.FileName);
             try
             {
-                var (imp, skip) = _ctx.Excel.Import(dlg.FileName);
-                MessageBox.Show($"Импортировано новых измерений: {imp}\nПропущено (дубликаты/битые строки): {skip}");
+                var (m, ms, md, mds) = _ctx.Excel.ImportAll(dlg.FileName);
+                string msg = $"Измерений: {m} (пропущено: {ms})";
+                if (md + mds > 0) msg += $"\nЛекарств: {md} (пропущено: {mds})";
+                MessageBox.Show(msg);
                 RefreshAll();
             }
             catch (Exception ex) { MessageBox.Show("Ошибка импорта: " + ex.Message); }
@@ -455,6 +508,23 @@ public partial class MainWindow : Window
             catch (Exception ex) { Dispatcher.Invoke(() => CompareInfo.Text = "Ошибка сверки: " + ex.Message); }
         });
     }
+    private void OnPasteExcel(object s, RoutedEventArgs e)
+    {
+        string text;
+        try { text = System.Windows.Clipboard.GetText(); }
+        catch (Exception ex) { MessageBox.Show("Буфер пуст или недоступен: " + ex.Message); return; }
+        if (string.IsNullOrWhiteSpace(text)) { MessageBox.Show("В буфере нет таблицы. Скопируйте кусок Excel (Ctrl+C)."); return; }
+        try
+        {
+            var (m, ms, md, mds) = _ctx.Excel.PasteFromClipboard(text);
+            string msg = $"Измерений: {m} (пропущено: {ms})";
+            if (md + mds > 0) msg += $"\nЛекарств: {md} (пропущено: {mds})";
+            if (m + md == 0) msg += "\nНе распознано: скопируйте строки вместе с шапкой (дата/время/...).";
+            MessageBox.Show(msg);
+            RefreshAll();
+        }
+        catch (Exception ex) { MessageBox.Show("Ошибка вставки: " + ex.Message); }
+    }
     private void OnExcelTemplate(object s, RoutedEventArgs e)
     {
         var dlg = new SaveFileDialog { Filter = "Excel (*.xlsx)|*.xlsx", FileName = "medcontrol_template.xlsx", InitialDirectory = FileDlg.InitialDir(_ctx), RestoreDirectory = true };
@@ -469,12 +539,36 @@ public partial class MainWindow : Window
             catch (Exception ex) { MessageBox.Show("Ошибка шаблона: " + ex.Message); }
         }
     }
+    private void OnReportPeriodChanged(object s, SelectionChangedEventArgs e)
+    {
+        if (ReportFromBox == null) return; // событие из XAML при загрузке
+        bool custom = (ReportPeriodBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() == "custom";
+        ReportFromBox.Visibility = custom ? Visibility.Visible : Visibility.Collapsed;
+        ReportToBox.Visibility = custom ? Visibility.Visible : Visibility.Collapsed;
+        ReportAnchorBox.Visibility = custom ? Visibility.Collapsed : Visibility.Visible;
+    }
+    private (DateTime From, DateTime To) ReportRange()
+    {
+        var anchor = ReportAnchorBox.SelectedDate ?? DateTime.Now;
+        string tag = (ReportPeriodBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "30";
+        return tag switch
+        {
+            "day" => (anchor.Date, anchor.Date.AddDays(1)),
+            "week" => (anchor.Date.AddDays(-6), anchor.Date.AddDays(1)),
+            "month" => (anchor.Date.AddDays(-29), anchor.Date.AddDays(1)),
+            "year" => (anchor.Date.AddDays(-364), anchor.Date.AddDays(1)),
+            "custom" => ((ReportFromBox.SelectedDate ?? DateTime.Now.AddDays(-30)).Date,
+                         ((ReportToBox.SelectedDate ?? DateTime.Now).Date).AddDays(1)),
+            _ => (DateTime.Now.AddDays(-30), DateTime.Now.AddDays(1)),
+        };
+    }
     private void OnPrintPreview(object s, RoutedEventArgs e)
     {
         var kind = (ReportKindBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "measurements";
+        var (from, to) = ReportRange();
         try
         {
-            var path = _ctx.Reports.BuildPdf(DateTime.Now.AddDays(-30), DateTime.Now, LandscapeBox.IsChecked == true, 11, kind);
+            var path = _ctx.Reports.BuildPdf(from, to, LandscapeBox.IsChecked == true, 11, kind, ChartsBox.IsChecked == true);
             ReportInfo.Text = "PDF сформирован: " + path;
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
         }

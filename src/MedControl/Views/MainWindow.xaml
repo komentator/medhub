@@ -10,6 +10,7 @@
                     <TextBlock Text="Ближайшие приёмы сегодня:" FontWeight="Bold"/>
                     <TextBox x:Name="TodayBox" IsReadOnly="True" AcceptsReturn="True" Height="120" TextWrapping="Wrap"/>
                     <WrapPanel>
+                        <Button x:Name="BellButton" Content="🔔" FontSize="20" Click="OnBell" ToolTip="Напоминания: нет активных"/>
                         <Button Content="Новое измерение" Click="OnNewMeasurement"/>
                         <Button Content="Показать измерения" Click="OnGotoMeasurements"/>
                         <Button Content="Оценить самочувствие" Click="OnNewWellBeing"/>
@@ -205,6 +206,7 @@
                     <WrapPanel>
                         <Button Content="Экспорт..." Click="OnExportExcel"/>
                         <Button Content="Импорт..." Click="OnImportExcel"/>
+                        <Button Content="Вставить из буфера" Click="OnPasteExcel"/>
                         <Button Content="Шаблон…" Click="OnExcelTemplate"/>
                         <Button Content="Сверить базу с файлом" Click="OnCompareExcel"/>
                     </WrapPanel>
@@ -216,6 +218,18 @@
                             <ComboBoxItem Content="Приём лекарств" Tag="intakes"/>
                             <ComboBoxItem Content="Совместный отчёт" Tag="joint"/>
                         </ComboBox>
+                        <ComboBox x:Name="ReportPeriodBox" Width="130" Margin="4" SelectionChanged="OnReportPeriodChanged">
+                            <ComboBoxItem Content="30 дней" Tag="30" IsSelected="True"/>
+                            <ComboBoxItem Content="День" Tag="day"/>
+                            <ComboBoxItem Content="Неделя" Tag="week"/>
+                            <ComboBoxItem Content="Месяц" Tag="month"/>
+                            <ComboBoxItem Content="Год" Tag="year"/>
+                            <ComboBoxItem Content="Даты…" Tag="custom"/>
+                        </ComboBox>
+                        <DatePicker x:Name="ReportAnchorBox" Width="140" Margin="4" ToolTip="Дата для периода"/>
+                        <DatePicker x:Name="ReportFromBox" Width="140" Margin="4" ToolTip="С" Visibility="Collapsed"/>
+                        <DatePicker x:Name="ReportToBox" Width="140" Margin="4" ToolTip="По" Visibility="Collapsed"/>
+                        <CheckBox x:Name="ChartsBox" Content="Графики" Margin="4" IsChecked="True"/>
                         <CheckBox x:Name="LandscapeBox" Content="Альбомная" Margin="4"/>
                         <Button Content="Предпросмотр" Click="OnPrintPreview"/>
                         <Button Content="Сохранить PDF" Click="OnSavePdf"/>

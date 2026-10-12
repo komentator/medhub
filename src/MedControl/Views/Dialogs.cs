@@ -40,6 +40,7 @@ public sealed class WellBeingDialog : Window
         skip.Click += (_, _) => DialogResult = false;
         p.Children.Add(skip);
         Content = p;
+        Loaded += (_, _) => UiTips.Apply(this);
     }
     private void Save(int score)
     {
@@ -104,6 +105,7 @@ public sealed class WizardWindow : Window
         done.Click += (_, _) => Finish();
         p.Children.Add(done);
         Content = new ScrollViewer { Content = p };
+        Loaded += (_, _) => UiTips.Apply(this);
     }
 
     private void PaintPack()

@@ -204,6 +204,7 @@ public sealed class MeasureMultiForm : Window
         var tonos = ctx.Meas.GetTonometers();
         if (tonos.Count == 0) return false;
         var w = new MeasureMultiForm(ctx, tonos) { Owner = owner };
+        UiTips.Apply(w);
         return w.ShowDialog() == true;
     }
 }

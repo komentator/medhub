@@ -289,6 +289,7 @@ public sealed class MedicationForm : Window
     public static bool Show(AppServices ctx, Window owner, Medication? edit)
     {
         var w = new MedicationForm(ctx, edit) { Owner = owner };
+        UiTips.Apply(w);
         return w.ShowDialog() == true;
     }
 }

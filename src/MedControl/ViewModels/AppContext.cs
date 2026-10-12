@@ -51,7 +51,7 @@ public sealed class AppServices
         Scheduler = new ReminderScheduler(Reminders, Log);
         WellBeing = new WellBeingService(Wb, Meas, Intakes);
         Backups = new BackupService(Settings, Log);
-        Excel = new ExcelService(Meas, Intakes, Wb, Log);
+        Excel = new ExcelService(Meas, Intakes, Wb, Meds, Log);
         Reports = new ReportService(Meas, Intakes, Wb, Log);
         Peers = new SyncPeerRepository(Db);
         Sync = new SyncService(Meds, Intakes, Meas, Wb, Peers, Settings, Log);

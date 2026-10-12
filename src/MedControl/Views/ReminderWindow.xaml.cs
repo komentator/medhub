@@ -16,6 +16,7 @@ public partial class ReminderWindow : Window
     public ReminderWindow(AppServices ctx, List<PlannedDose> doses, bool isTest = false)
     {
         InitializeComponent();
+        UiTips.Apply(this);
         _ctx = ctx; _doses = doses; _isTest = isTest;
         // Окно — 80% рабочей области экрана, по центру.
         var wa = SystemParameters.WorkArea;

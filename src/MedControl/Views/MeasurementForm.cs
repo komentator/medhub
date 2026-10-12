@@ -193,6 +193,7 @@ public sealed class MeasurementForm : Window
     {
         if (edit == null && ctx.Meas.GetTonometers().Count == 0) return false;
         var w = new MeasurementForm(ctx, edit, historic) { Owner = owner };
+        UiTips.Apply(w);
         return w.ShowDialog() == true;
     }
 }
@@ -241,6 +242,7 @@ public static class MeasurementDetails
         close.Click += (_, _) => w.DialogResult = false;
         p.Children.Add(close);
         w.Content = p;
+        UiTips.Apply(w);
         w.ShowDialog();
     }
 }
