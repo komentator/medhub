@@ -166,7 +166,7 @@ public class ImportTemplateTests : IDisposable
         {
             Assert.True(File.Exists(path));
             using var doc = PdfSharp.Pdf.IO.PdfReader.Open(path, PdfSharp.Pdf.IO.PdfDocumentOpenMode.ReadOnly);
-            Assert.True(doc.PageCount >= 3); // титул + график давления + самочувствие
+            Assert.Equal(1, doc.PageCount); // один альбомный лист: шапка + оба графика
         }
         finally { try { File.Delete(path); } catch { } }
     }

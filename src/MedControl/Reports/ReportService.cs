@@ -35,6 +35,34 @@ public sealed class ReportService
         g.DrawImage(img, 40, 40, maxW, h);
     }
 
+    // Один альбомный лист: шапка + оба графика друг под другом.
+    private static void AddCombinedChartsPage(PdfDocument doc, string header, XImage pressure, XImage wb, int fontSize)
+    {
+        var pg = doc.AddPage();
+        pg.Size = PdfSharp.PageSize.A4;
+        pg.Orientation = PdfSharp.PageOrientation.Landscape;
+        var g = XGraphics.FromPdfPage(pg);
+        var hf = new XFont("Arial", fontSize <= 0 ? 11 : fontSize);
+        g.DrawString(header, hf, XBrushes.Black, XUnit.FromPoint(40), XUnit.FromPoint(36));
+        double w = pg.Width.Point - 80;
+        double y = 56;
+        double half = (pg.Height.Point - y - 30) / 2;
+        DrawFit(g, pressure, 40, y, w, half - 6);
+        DrawFit(g, wb, 40, y + half, w, half - 6);
+    }
+
+    private static void DrawFit(XGraphics g, XImage img, double x, double y, double maxW, double maxH)
+    {
+        double h = maxW * img.PixelHeight / Math.Max(1, img.PixelWidth);
+        double w = maxW;
+        if (h > maxH)
+        {
+            w *= maxH / h;
+            h = maxH;
+        }
+        g.DrawImage(img, x, y, w, h);
+    }
+
     public string BuildPdf(DateTime from, DateTime to, bool landscape, int fontSize, string kind, bool charts = true)
     {
         // Потоки картинок живут до конца Save (PdfSharp читает их лениво).
@@ -44,17 +72,23 @@ public sealed class ReportService
             Directory.CreateDirectory(Paths.ReportDir);
             var doc = new PdfDocument();
             doc.Info.Title = "MedControl отчёт";
-            var page = doc.AddPage();
-            page.Size = PdfSharp.PageSize.A4;
-            page.Orientation = landscape ? PdfSharp.PageOrientation.Landscape : PdfSharp.PageOrientation.Portrait;
-            var gfx = XGraphics.FromPdfPage(page);
+            bool tables = kind != "charts";
+            PdfPage? page = null;
+            XGraphics? gfx = null;
+            if (tables)
+            {
+                page = doc.AddPage();
+                page.Size = PdfSharp.PageSize.A4;
+                page.Orientation = landscape ? PdfSharp.PageOrientation.Landscape : PdfSharp.PageOrientation.Portrait;
+                gfx = XGraphics.FromPdfPage(page);
+            }
             var font = new XFont("Arial", fontSize <= 0 ? 11 : fontSize);
             var small = new XFont("Arial", 9);
             var header = new XFont("Arial", (fontSize <= 0 ? 11 : fontSize) + 2, PdfSharp.Drawing.XFontStyleEx.Bold);
             double y = 40;
             void Line(string text, XFont f, int step = 14)
             {
-                gfx.DrawString(text, f, XBrushes.Black, XUnit.FromPoint(40), XUnit.FromPoint(y));
+                gfx!.DrawString(text, f, XBrushes.Black, XUnit.FromPoint(40), XUnit.FromPoint(y));
                 y += step;
             }
             string kindName = kind switch
@@ -65,9 +99,11 @@ public sealed class ReportService
                 "charts" => "Графики",
                 _ => kind,
             };
-            bool tables = kind != "charts";
-            Line($"MedControl — {kindName}. Сформировано: {DateTime.Now:yyyy-MM-dd HH:mm}. Период: {from:yyyy-MM-dd} — {to:yyyy-MM-dd}", small);
-            y += 10;
+            if (tables)
+            {
+                Line($"MedControl — {kindName}. Сформировано: {DateTime.Now:yyyy-MM-dd HH:mm}. Период: {from:yyyy-MM-dd} — {to:yyyy-MM-dd}", small);
+                y += 10;
+            }
             if (tables && kind is "measurements" or "joint")
             {
                 Line("Измерения давления", header, 20);
@@ -76,7 +112,7 @@ public sealed class ReportService
                 string lastTono = "";
                 foreach (var m in rows)
                 {
-                    if (y > page.Height.Point - 60) break;
+                    if (y > page!.Height.Point - 60) break;
                     if (m.TonometerName != lastTono)
                     {
                         lastTono = m.TonometerName;
@@ -96,11 +132,11 @@ public sealed class ReportService
                 var rows = _intakes.GetRange(from, to).OrderBy(i => i.ScheduledAt).Take(80).ToList();
                 foreach (var g in rows.GroupBy(i => i.ScheduledAt))
                 {
-                    if (y > page.Height.Point - 60) break;
+                    if (y > page!.Height.Point - 60) break;
                     Line($"{g.Key:dd.MM.yyyy HH:mm} — " + string.Join("; ", g.Select(i => $"{i.MedicationName} ({i.Dosage})")), font, 18);
                     foreach (var i in g)
                     {
-                        if (y > page.Height.Point - 60) break;
+                        if (y > page!.Height.Point - 60) break;
                         string status = i.Status switch
                         {
                             IntakeStatus.Taken => "Принял",
@@ -122,12 +158,13 @@ public sealed class ReportService
                 wbs = _wb.GetRange(from, to).Take(40).ToList();
                 foreach (var w in wbs)
                 {
-                    if (y > page.Height.Point - 60) break;
+                    if (y > page!.Height.Point - 60) break;
                     Line($"{w.CreatedAt:yyyy-MM-dd HH:mm} — {w.Score}/10" + (string.IsNullOrWhiteSpace(w.Comment) ? "" : $" ({w.Comment})"), small);
                 }
             }
-            if (charts || kind == "charts")
+            if (kind == "charts")
             {
+                // Только графики: один альбомный лист (шапка + оба графика).
                 try
                 {
                     XImage Img(byte[] b)
@@ -139,12 +176,33 @@ public sealed class ReportService
                         streams.Add(ms);
                         return XImage.FromStream(ms);
                     }
-                    if (kind is "measurements" or "joint" or "charts")
+                    var allMeas = _meas.GetRange(from, to).OrderBy(m => m.TakenAt).ToList();
+                    AddCombinedChartsPage(doc,
+                        $"MedControl — Графики. Сформировано: {DateTime.Now:yyyy-MM-dd HH:mm}. Период: {from:yyyy-MM-dd} — {to:yyyy-MM-dd}",
+                        Img(ChartImage.Pressure(allMeas)),
+                        Img(ChartImage.WellBeing(_wb.GetRange(from, to).ToList())),
+                        fontSize);
+                }
+                catch (Exception ex) { _log.Write("PDF", "Charts: " + ex.Message); }
+            }
+            else if (charts)
+            {
+                try
+                {
+                    XImage Img(byte[] b)
+                    {
+                        var ms = new MemoryStream();
+                        ms.Write(b, 0, b.Length);
+                        ms.Position = 0;
+                        streams.Add(ms);
+                        return XImage.FromStream(ms);
+                    }
+                    if (kind is "measurements" or "joint")
                     {
                         var allMeas = _meas.GetRange(from, to).OrderBy(m => m.TakenAt).ToList();
-                        AddChartPage(doc, page, Img(ChartImage.Pressure(allMeas)));
+                        AddChartPage(doc, page!, Img(ChartImage.Pressure(allMeas)));
                     }
-                    AddChartPage(doc, page, Img(ChartImage.WellBeing(_wb.GetRange(from, to).ToList())));
+                    AddChartPage(doc, page!, Img(ChartImage.WellBeing(_wb.GetRange(from, to).ToList())));
                 }
                 catch (Exception ex) { _log.Write("PDF", "Charts: " + ex.Message); }
             }
