@@ -96,8 +96,9 @@ public sealed class MainViewModel : ObservableObject
                 GeometryStroke = new SolidColorPaint(color) { StrokeThickness = thick },
                 GeometryFill = new SolidColorPaint(color),
             };
+            string name = tonos[i];
             s.XToolTipLabelFormatter = point => TimeDate(times, GlobalIdx(tids, (int)point.Index));
-            s.YToolTipLabelFormatter = point => TimeTip(times, pool, wb, GlobalIdx(tids, (int)point.Index));
+            s.YToolTipLabelFormatter = point => SeriesTip(times, pool, wb, GlobalIdx(tids, (int)point.Index), name);
             res.Add(s);
         }
         return res.ToArray();
@@ -155,28 +156,20 @@ public sealed class MainViewModel : ObservableObject
     private static int GlobalIdx(List<int> gidx, int local) => local < 0 || local >= gidx.Count ? -1 : gidx[local];
 
     // Тултип — одна строка без переносов (Skia не рисует \n) и только кириллическим шрифтом (см. TooltipTextPaint).
-    // На одной вертикали — данные всех тонометров этого момента времени.
+    // Каждая линия показывает только свой тонометр (дата — в заголовке).
     private static string TimeDate(List<DateTime> times, int index)
         => index < 0 || index >= times.Count ? "" : times[index].ToString("dd.MM.yyyy HH:mm");
 
-    private static string TimeTip(List<DateTime> times, List<Measurement> pool, Dictionary<Guid, List<int>> wb, int index)
+    private static string SeriesTip(List<DateTime> times, List<Measurement> pool, Dictionary<Guid, List<int>> wb, int index, string tono)
     {
         if (index < 0 || index >= times.Count) return "";
-        var at = times[index];
-        var items = pool.Where(m => m.TakenAt == at).ToList();
-        var parts = new List<string> { at.ToString("dd.MM HH:mm") };
-        foreach (var g in items.GroupBy(m => m.TonometerName).OrderBy(g => g.Key))
-        {
-            string vals = $"{g.Average(m => (double)m.Systolic):0}/{g.Average(m => (double)m.Diastolic):0}";
-            var pu = g.Where(m => m.Pulse != 0).ToList();
-            if (pu.Count > 0) vals += $" п.{g.Average(m => (double)m.Pulse):0}";
-            parts.Add($"{g.Key} {vals}");
-        }
-        var scores = items.Where(m => wb.ContainsKey(m.Id)).SelectMany(m => wb[m.Id]).Distinct().ToList();
-        if (scores.Count > 0) parts.Add("сам. " + string.Join(",", scores));
-        var com = items.Select(m => m.Comment).FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
-        if (com != null) parts.Add(Short(com, 40));
-        return string.Join(" • ", parts);
+        var m = pool.FirstOrDefault(m => m.TakenAt == times[index] && m.TonometerName == tono);
+        if (m == null) return "";
+        var s = wb.TryGetValue(m.Id, out var sc) ? string.Join(",", sc) : "—";
+        var c = string.IsNullOrWhiteSpace(m.Comment) ? "" : " • " + Short(m.Comment, 40);
+        string vals = $"{m.Systolic}/{m.Diastolic}";
+        if (m.Pulse != 0) vals += $" п.{m.Pulse}";
+        return $"{tono} {vals} • сам. {s}{c}";
     }
 
     private static string WbDate(List<WellBeingRating> pts, int index)
