@@ -37,6 +37,8 @@ public sealed class ReportService
 
     public string BuildPdf(DateTime from, DateTime to, bool landscape, int fontSize, string kind, bool charts = true)
     {
+        // Потоки картинок живут до конца Save (PdfSharp читает их лениво).
+        var streams = new List<MemoryStream>();
         try
         {
             Directory.CreateDirectory(Paths.ReportDir);
@@ -126,12 +128,14 @@ public sealed class ReportService
             }
             if (charts || kind == "charts")
             {
-                var streams = new List<MemoryStream>();
                 try
                 {
                     XImage Img(byte[] b)
                     {
-                        var ms = new MemoryStream(b);
+                        // Поток обязан быть расширяемым (иначе GetBuffer бросает исключение).
+                        var ms = new MemoryStream();
+                        ms.Write(b, 0, b.Length);
+                        ms.Position = 0;
                         streams.Add(ms);
                         return XImage.FromStream(ms);
                     }
@@ -143,12 +147,12 @@ public sealed class ReportService
                     AddChartPage(doc, page, Img(ChartImage.WellBeing(_wb.GetRange(from, to).ToList())));
                 }
                 catch (Exception ex) { _log.Write("PDF", "Charts: " + ex.Message); }
-                finally { foreach (var s in streams) try { s.Dispose(); } catch { } }
             }
             var path = Path.Combine(Paths.ReportDir, $"medkontrol_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.pdf");
             doc.Save(path);
             return path;
         }
         catch (Exception ex) { _log.Write("PDF", ex.Message); throw; }
+        finally { foreach (var s in streams) try { s.Dispose(); } catch { } }
     }
 }

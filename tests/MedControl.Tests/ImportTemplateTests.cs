@@ -147,6 +147,30 @@ public class ImportTemplateTests : IDisposable
         Assert.Equal(new[] { "x" }, rows[2]);
     }
 
+    [Fact] public void Pdf_Charts_Pages_Present()
+    {
+        Directory.CreateDirectory(_dir);
+        var db = new Db(Path.Combine(_dir, "pdf.db"));
+        var meas = new MeasurementRepository(db);
+        var t = new MedControl.Models.Tonometer { Name = "T" };
+        meas.SaveTonometer(t);
+        meas.Upsert(new MedControl.Models.Measurement
+        {
+            TonometerId = t.Id, TonometerName = t.Name, TakenAt = new DateTime(2026, 10, 1, 8, 0, 0),
+            Systolic = 120, Diastolic = 80, Pulse = 70, CreatedAt = new DateTime(2026, 10, 1, 8, 0, 0),
+        });
+        var rep = new MedControl.Reports.ReportService(meas, new IntakeRepository(db),
+            new WellBeingRepository(db), new LogService(db));
+        string path = rep.BuildPdf(new DateTime(2026, 9, 1), new DateTime(2026, 11, 1), false, 11, "charts", true);
+        try
+        {
+            Assert.True(File.Exists(path));
+            using var doc = PdfSharp.Pdf.IO.PdfReader.Open(path, PdfSharp.Pdf.IO.PdfDocumentOpenMode.ReadOnly);
+            Assert.True(doc.PageCount >= 3); // титул + график давления + самочувствие
+        }
+        finally { try { File.Delete(path); } catch { } }
+    }
+
     [Fact] public void ChartImage_Renders_Png()
     {
         var meas = new List<MedControl.Models.Measurement>
