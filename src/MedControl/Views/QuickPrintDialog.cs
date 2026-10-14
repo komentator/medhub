@@ -14,18 +14,18 @@ using Visibility = System.Windows.Visibility;
 
 namespace MedControl.Views;
 
-// Окно печати: что печатать + графики + период (день/неделя/месяц/год/даты с–по).
-public sealed record PrintRequest(string Kind, DateTime From, DateTime To, bool Charts);
+// Окно печати: что печатать (включая графики) + период (день/неделя/месяц/год/даты с–по).
+public sealed record PrintRequest(string Kind, DateTime From, DateTime To);
 
 public sealed class QuickPrintDialog : Window
 {
     private readonly ListBox _kind = new();
     private readonly ComboBox _period = new();
     private readonly System.Windows.Controls.DatePicker _anchor = new();
-    private readonly TextBlock _anchorLabel = new();
+    private readonly StackPanel _dateRow = new();
     private readonly System.Windows.Controls.DatePicker _from = new();
     private readonly System.Windows.Controls.DatePicker _to = new();
-    private readonly CheckBox _charts = new();
+    private readonly StackPanel _rangeRow = new();
     private PrintRequest? _result;
 
     private QuickPrintDialog()
@@ -44,15 +44,11 @@ public sealed class QuickPrintDialog : Window
         _kind.Items.Add("Измерения давления");
         _kind.Items.Add("Приём лекарств");
         _kind.Items.Add("Совместный отчёт");
+        _kind.Items.Add("Графики");
         _kind.SelectedIndex = 0;
         _kind.SelectionMode = SelectionMode.Single;
         _kind.Margin = new Thickness(0, 4, 0, 0);
         p.Children.Add(_kind);
-
-        p.Children.Add(new TextBlock { Text = "Печатать графики?", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 10, 0, 0) });
-        _charts.Content = "Да, добавить страницы с графиками";
-        _charts.IsChecked = true;
-        p.Children.Add(_charts);
 
         p.Children.Add(new TextBlock { Text = "За какой период?", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 10, 0, 0) });
         _period.Items.Add("Последние 30 дней");
@@ -65,19 +61,20 @@ public sealed class QuickPrintDialog : Window
         _period.SelectionChanged += (_, _) => PaintDates();
         p.Children.Add(_period);
 
-        _anchorLabel = new TextBlock { Text = "Дата:", Margin = new Thickness(0, 6, 0, 0) };
-        p.Children.Add(_anchorLabel);
+        _dateRow = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
+        _dateRow.Children.Add(new TextBlock { Text = "Дата:" });
         _anchor.SelectedDate = DateTime.Now;
-        p.Children.Add(_anchor);
+        _dateRow.Children.Add(_anchor);
+        p.Children.Add(_dateRow);
 
-        var range = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
-        range.Children.Add(new TextBlock { Text = "С: ", VerticalAlignment = VerticalAlignment.Center });
+        _rangeRow = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
+        _rangeRow.Children.Add(new TextBlock { Text = "С:" });
         _from.SelectedDate = DateTime.Now.AddDays(-30);
-        range.Children.Add(_from);
-        range.Children.Add(new TextBlock { Text = "  По: ", VerticalAlignment = VerticalAlignment.Center });
+        _rangeRow.Children.Add(_from);
+        _rangeRow.Children.Add(new TextBlock { Text = "По:", Margin = new Thickness(0, 6, 0, 0) });
         _to.SelectedDate = DateTime.Now;
-        range.Children.Add(_to);
-        p.Children.Add(range);
+        _rangeRow.Children.Add(_to);
+        p.Children.Add(_rangeRow);
         PaintDates();
 
         var btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
@@ -95,16 +92,14 @@ public sealed class QuickPrintDialog : Window
     private void PaintDates()
     {
         bool custom = _period.SelectedIndex == 5;
-        _from.Visibility = custom ? Visibility.Visible : Visibility.Collapsed;
-        _to.Visibility = custom ? Visibility.Visible : Visibility.Collapsed;
-        _anchor.Visibility = custom ? Visibility.Collapsed : Visibility.Visible;
-        _anchorLabel.Visibility = custom ? Visibility.Collapsed : Visibility.Visible;
+        _dateRow.Visibility = custom ? Visibility.Collapsed : Visibility.Visible;
+        _rangeRow.Visibility = custom ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void Save()
     {
-        if (_kind.SelectedIndex < 0) { Steps.Msg(this, "Выберите, что печатать."); return; }
-        string kind = _kind.SelectedIndex switch { 1 => "intakes", 2 => "joint", _ => "measurements" };
+        if (_kind.SelectedItem == null) { Steps.Msg(this, "Выберите, что печатать."); return; }
+        string kind = _kind.SelectedIndex switch { 1 => "intakes", 2 => "joint", 3 => "charts", _ => "measurements" };
         var anchor = _anchor.SelectedDate ?? DateTime.Now;
         (DateTime from, DateTime to) = _period.SelectedIndex switch
         {
@@ -117,7 +112,7 @@ public sealed class QuickPrintDialog : Window
             _ => (DateTime.Now.AddDays(-30), DateTime.Now.AddDays(1)),
         };
         if (to <= from) { Steps.Msg(this, "Дата «по» должна быть позже даты «с»."); return; }
-        _result = new PrintRequest(kind, from, to, _charts.IsChecked == true);
+        _result = new PrintRequest(kind, from, to);
         DialogResult = true;
     }
 

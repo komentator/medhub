@@ -55,9 +55,18 @@ public sealed class ReportService
                 gfx.DrawString(text, f, XBrushes.Black, XUnit.FromPoint(40), XUnit.FromPoint(y));
                 y += step;
             }
-            Line($"MedControl — {kind}. Сформировано: {DateTime.Now:yyyy-MM-dd HH:mm}. Период: {from:yyyy-MM-dd} — {to:yyyy-MM-dd}", small);
+            string kindName = kind switch
+            {
+                "measurements" => "Измерения",
+                "intakes" => "Приём лекарств",
+                "joint" => "Совместный отчёт",
+                "charts" => "Графики",
+                _ => kind,
+            };
+            bool tables = kind != "charts";
+            Line($"MedControl — {kindName}. Сформировано: {DateTime.Now:yyyy-MM-dd HH:mm}. Период: {from:yyyy-MM-dd} — {to:yyyy-MM-dd}", small);
             y += 10;
-            if (kind is "measurements" or "joint")
+            if (tables && kind is "measurements" or "joint")
             {
                 Line("Измерения давления", header, 20);
                 var rows = _meas.GetRange(from, to).OrderBy(m => m.TonometerName).ThenBy(m => m.TakenAt).Take(80).ToList();
@@ -79,7 +88,7 @@ public sealed class ReportService
                 }
                 y += 10;
             }
-            if (kind is "intakes" or "joint")
+            if (tables && kind is "intakes" or "joint")
             {
                 Line("Приём лекарств", header, 20);
                 var rows = _intakes.GetRange(from, to).OrderBy(i => i.ScheduledAt).Take(80).ToList();
@@ -104,14 +113,18 @@ public sealed class ReportService
                 y += 10;
             }
             // Самочувствие отдельным разделом (§26)
-            Line("Самочувствие:", header, 20);
-            var wbs = _wb.GetRange(from, to).Take(40).ToList();
-            foreach (var w in wbs)
+            List<WellBeingRating> wbs = new();
+            if (tables)
             {
-                if (y > page.Height.Point - 60) break;
-                Line($"{w.CreatedAt:yyyy-MM-dd HH:mm} — {w.Score}/10" + (string.IsNullOrWhiteSpace(w.Comment) ? "" : $" ({w.Comment})"), small);
+                Line("Самочувствие:", header, 20);
+                wbs = _wb.GetRange(from, to).Take(40).ToList();
+                foreach (var w in wbs)
+                {
+                    if (y > page.Height.Point - 60) break;
+                    Line($"{w.CreatedAt:yyyy-MM-dd HH:mm} — {w.Score}/10" + (string.IsNullOrWhiteSpace(w.Comment) ? "" : $" ({w.Comment})"), small);
+                }
             }
-            if (charts)
+            if (charts || kind == "charts")
             {
                 var streams = new List<MemoryStream>();
                 try
@@ -122,7 +135,7 @@ public sealed class ReportService
                         streams.Add(ms);
                         return XImage.FromStream(ms);
                     }
-                    if (kind is "measurements" or "joint")
+                    if (kind is "measurements" or "joint" or "charts")
                     {
                         var allMeas = _meas.GetRange(from, to).OrderBy(m => m.TakenAt).ToList();
                         AddChartPage(doc, page, Img(ChartImage.Pressure(allMeas)));

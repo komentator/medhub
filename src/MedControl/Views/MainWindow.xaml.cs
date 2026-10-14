@@ -586,7 +586,7 @@ public partial class MainWindow : Window
         if (res == null) return;
         try
         {
-            var path = _ctx.Reports.BuildPdf(res.From, res.To, false, 11, res.Kind, res.Charts);
+            var path = _ctx.Reports.BuildPdf(res.From, res.To, false, 11, res.Kind, true);
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
         }
         catch (Exception ex) { MessageBox.Show("Ошибка отчёта: " + ex.Message); }
