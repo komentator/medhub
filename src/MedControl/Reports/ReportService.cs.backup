@@ -1,0 +1,216 @@
+using System.IO;
+using PdfSharp.Drawing;
+using PdfSharp.Pdf;
+using MedControl.Data;
+using MedControl.Models;
+using MedControl.Repositories;
+using MedControl.Logging;
+
+namespace MedControl.Reports;
+
+// ┬з25тАУ26. ╨Я╨╡╤З╨░╤В╤М ╤А╨╡╨╖╤Г╨╗╤М╤В╨░╤В╨╛╨▓ + ╤Б╨╛╤Е╤А╨░╨╜╨╡╨╜╨╕╨╡ PDF ╨▒╨╡╨╖ ╨┤╨╕╨░╨╗╨╛╨│╨░ ╨▓ Reports\medkontrol_*.pdf, A4.
+public sealed class ReportService
+{
+    private readonly MeasurementRepository _meas;
+    private readonly IntakeRepository _intakes;
+    private readonly WellBeingRepository _wb;
+    private readonly LogService _log;
+    public ReportService(MeasurementRepository meas, IntakeRepository intakes, WellBeingRepository wb, LogService log)
+    { _meas = meas; _intakes = intakes; _wb = wb; _log = log; }
+
+    private static void AddChartPage(PdfDocument doc, PdfPage tpl, XImage img)
+    {
+        var pg = doc.AddPage();
+        pg.Size = tpl.Size;
+        pg.Orientation = tpl.Orientation;
+        var g = XGraphics.FromPdfPage(pg);
+        double maxW = pg.Width.Point - 80;
+        double h = maxW * img.PixelHeight / Math.Max(1, img.PixelWidth);
+        double maxH = pg.Height.Point - 80;
+        if (h > maxH)
+        {
+            maxW *= maxH / h;
+            h = maxH;
+        }
+        g.DrawImage(img, 40, 40, maxW, h);
+    }
+
+    // ╨Ю╨┤╨╕╨╜ ╨░╨╗╤М╨▒╨╛╨╝╨╜╤Л╨╣ ╨╗╨╕╤Б╤В: ╤И╨░╨┐╨║╨░ + ╨╛╨▒╨░ ╨│╤А╨░╤Д╨╕╨║╨░ ╨┤╤А╤Г╨│ ╨┐╨╛╨┤ ╨┤╤А╤Г╨│╨╛╨╝.
+    private static void AddCombinedChartsPage(PdfDocument doc, string header, XImage pressure, XImage wb, int fontSize)
+    {
+        var pg = doc.AddPage();
+        pg.Size = PdfSharp.PageSize.A4;
+        pg.Orientation = PdfSharp.PageOrientation.Landscape;
+        var g = XGraphics.FromPdfPage(pg);
+        var hf = new XFont("Arial", fontSize <= 0 ? 11 : fontSize);
+        g.DrawString(header, hf, XBrushes.Black, XUnit.FromPoint(40), XUnit.FromPoint(36));
+        double w = pg.Width.Point - 80;
+        double y = 56;
+        double half = (pg.Height.Point - y - 30) / 2;
+        DrawFit(g, pressure, 40, y, w, half - 6);
+        DrawFit(g, wb, 40, y + half, w, half - 6);
+    }
+
+    private static void DrawFit(XGraphics g, XImage img, double x, double y, double maxW, double maxH)
+    {
+        double h = maxW * img.PixelHeight / Math.Max(1, img.PixelWidth);
+        double w = maxW;
+        if (h > maxH)
+        {
+            w *= maxH / h;
+            h = maxH;
+        }
+        g.DrawImage(img, x, y, w, h);
+    }
+
+    public string BuildPdf(DateTime from, DateTime to, bool landscape, int fontSize, string kind, bool charts = true)
+    {
+        // ╨Я╨╛╤В╨╛╨║╨╕ ╨║╨░╤А╤В╨╕╨╜╨╛╨║ ╨╢╨╕╨▓╤Г╤В ╨┤╨╛ ╨║╨╛╨╜╤Ж╨░ Save (PdfSharp ╤З╨╕╤В╨░╨╡╤В ╨╕╤Е ╨╗╨╡╨╜╨╕╨▓╨╛).
+        var streams = new List<MemoryStream>();
+        try
+        {
+            Directory.CreateDirectory(Paths.ReportDir);
+            var doc = new PdfDocument();
+            doc.Info.Title = "MedControl ╨╛╤В╤З╤С╤В";
+            bool tables = kind != "charts";
+            PdfPage? page = null;
+            XGraphics? gfx = null;
+            if (tables)
+            {
+                page = doc.AddPage();
+                page.Size = PdfSharp.PageSize.A4;
+                page.Orientation = landscape ? PdfSharp.PageOrientation.Landscape : PdfSharp.PageOrientation.Portrait;
+                gfx = XGraphics.FromPdfPage(page);
+            }
+            var font = new XFont("Arial", fontSize <= 0 ? 11 : fontSize);
+            var small = new XFont("Arial", 9);
+            var header = new XFont("Arial", (fontSize <= 0 ? 11 : fontSize) + 2, PdfSharp.Drawing.XFontStyleEx.Bold);
+            double y = 40;
+            void Line(string text, XFont f, int step = 14)
+            {
+                gfx!.DrawString(text, f, XBrushes.Black, XUnit.FromPoint(40), XUnit.FromPoint(y));
+                y += step;
+            }
+            string kindName = kind switch
+            {
+                "measurements" => "╨Ш╨╖╨╝╨╡╤А╨╡╨╜╨╕╤П",
+                "intakes" => "╨Я╤А╨╕╤С╨╝ ╨╗╨╡╨║╨░╤А╤Б╤В╨▓",
+                "joint" => "╨б╨╛╨▓╨╝╨╡╤Б╤В╨╜╤Л╨╣ ╨╛╤В╤З╤С╤В",
+                "charts" => "╨У╤А╨░╤Д╨╕╨║╨╕",
+                _ => kind,
+            };
+            if (tables)
+            {
+                Line($"MedControl тАФ {kindName}. ╨б╤Д╨╛╤А╨╝╨╕╤А╨╛╨▓╨░╨╜╨╛: {DateTime.Now:yyyy-MM-dd HH:mm}. ╨Я╨╡╤А╨╕╨╛╨┤: {from:yyyy-MM-dd} тАФ {to:yyyy-MM-dd}", small);
+                y += 10;
+            }
+            if (tables && kind is "measurements" or "joint")
+            {
+                Line("╨Ш╨╖╨╝╨╡╤А╨╡╨╜╨╕╤П ╨┤╨░╨▓╨╗╨╡╨╜╨╕╤П", header, 20);
+                var rows = _meas.GetRange(from, to).OrderBy(m => m.TonometerName).ThenBy(m => m.TakenAt).Take(80).ToList();
+                var scores = _wb.GetScoresByMeasurement(rows.Select(r => r.Id));
+                string lastTono = "";
+                foreach (var m in rows)
+                {
+                    if (y > page!.Height.Point - 60) break;
+                    if (m.TonometerName != lastTono)
+                    {
+                        lastTono = m.TonometerName;
+                        y += 6;
+                        Line($"╨в╨╛╨╜╨╛╨╝╨╡╤В╤А: {lastTono}", font, 18);
+                    }
+                    var sc = scores.TryGetValue(m.Id, out var s) ? string.Join(",", s) : "тАФ";
+                    Line($"{m.TakenAt:dd.MM.yyyy}  {m.TakenAt:HH:mm}  ╨▓╨╡╤А╤Е╨╜╨╡╨╡ {m.Systolic}  ╨╜╨╕╨╢╨╜╨╡╨╡ {m.Diastolic}  ╨┐╤Г╨╗╤М╤Б {m.Pulse}  ╤Б╨░╨╝╨╛╤З╤Г╨▓╤Б╤В╨▓╨╕╨╡: {sc}", small);
+                    if (!string.IsNullOrWhiteSpace(m.Comment))
+                        Line($"╨Ъ╨╛╨╝╨╝╨╡╨╜╤В╨░╤А╨╕╨╣: {m.Comment}", small);
+                }
+                y += 10;
+            }
+            if (tables && kind is "intakes" or "joint")
+            {
+                Line("╨Я╤А╨╕╤С╨╝ ╨╗╨╡╨║╨░╤А╤Б╤В╨▓", header, 20);
+                var rows = _intakes.GetRange(from, to).OrderBy(i => i.ScheduledAt).Take(80).ToList();
+                foreach (var g in rows.GroupBy(i => i.ScheduledAt))
+                {
+                    if (y > page!.Height.Point - 60) break;
+                    Line($"{g.Key:dd.MM.yyyy HH:mm} тАФ " + string.Join("; ", g.Select(i => $"{i.MedicationName} ({i.Dosage})")), font, 18);
+                    foreach (var i in g)
+                    {
+                        if (y > page!.Height.Point - 60) break;
+                        string status = i.Status switch
+                        {
+                            IntakeStatus.Taken => "╨Я╤А╨╕╨╜╤П╨╗",
+                            IntakeStatus.TakenLate => "╨Я╤А╨╕╨╜╤П╨╗ ╨┐╨╛╨╖╨╢╨╡",
+                            IntakeStatus.Missed => "╨Я╤А╨╛╨┐╤Г╤Й╨╡╨╜╨╛",
+                            _ => "╨Т╨╜╨╡╨┐╨╗╨░╨╜╨╛╨▓╤Л╨╣",
+                        };
+                        Line($"╨д╨░╨║╤В: {(i.ActualAt?.ToString("dd.MM HH:mm") ?? "тАФ")}  ╨б╤В╨░╤В╤Г╤Б: {status}" +
+                            (string.IsNullOrWhiteSpace(i.Comment) ? "" : $"  ╨Ъ╨╛╨╝╨╝╨╡╨╜╤В╨░╤А╨╕╨╣: {i.Comment}"), small);
+                    }
+                }
+                y += 10;
+            }
+            // ╨б╨░╨╝╨╛╤З╤Г╨▓╤Б╤В╨▓╨╕╨╡ ╨╛╤В╨┤╨╡╨╗╤М╨╜╤Л╨╝ ╤А╨░╨╖╨┤╨╡╨╗╨╛╨╝ (┬з26)
+            List<WellBeingRating> wbs = new();
+            if (tables)
+            {
+                Line("╨б╨░╨╝╨╛╤З╤Г╨▓╤Б╤В╨▓╨╕╨╡:", header, 20);
+                wbs = _wb.GetRange(from, to).Take(40).ToList();
+                foreach (var w in wbs)
+                {
+                    if (y > page!.Height.Point - 60) break;
+                    Line($"{w.CreatedAt:yyyy-MM-dd HH:mm} тАФ {w.Score}/10" + (string.IsNullOrWhiteSpace(w.Comment) ? "" : $" ({w.Comment})"), small);
+                }
+            }
+            if (kind == "charts")
+            {
+                // ╨в╨╛╨╗╤М╨║╨╛ ╨│╤А╨░╤Д╨╕╨║╨╕: ╨╛╨┤╨╕╨╜ ╨░╨╗╤М╨▒╨╛╨╝╨╜╤Л╨╣ ╨╗╨╕╤Б╤В (╤И╨░╨┐╨║╨░ + ╨╛╨▒╨░ ╨│╤А╨░╤Д╨╕╨║╨░).
+                try
+                {
+                    XImage Img(byte[] b)
+                    {
+                        // ╨Я╨╛╤В╨╛╨║ ╨╛╨▒╤П╨╖╨░╨╜ ╨▒╤Л╤В╤М ╤А╨░╤Б╤И╨╕╤А╤П╨╡╨╝╤Л╨╝ (╨╕╨╜╨░╤З╨╡ GetBuffer ╨▒╤А╨╛╤Б╨░╨╡╤В ╨╕╤Б╨║╨╗╤О╤З╨╡╨╜╨╕╨╡).
+                        var ms = new MemoryStream();
+                        ms.Write(b, 0, b.Length);
+                        ms.Position = 0;
+                        streams.Add(ms);
+                        return XImage.FromStream(ms);
+                    }
+                    var allMeas = _meas.GetRange(from, to).OrderBy(m => m.TakenAt).ToList();
+                    AddCombinedChartsPage(doc,
+                        $"MedControl тАФ ╨У╤А╨░╤Д╨╕╨║╨╕. ╨б╤Д╨╛╤А╨╝╨╕╤А╨╛╨▓╨░╨╜╨╛: {DateTime.Now:yyyy-MM-dd HH:mm}. ╨Я╨╡╤А╨╕╨╛╨┤: {from:yyyy-MM-dd} тАФ {to:yyyy-MM-dd}",
+                        Img(ChartImage.Pressure(allMeas)),
+                        Img(ChartImage.WellBeing(_wb.GetRange(from, to).ToList())),
+                        fontSize);
+                }
+                catch (Exception ex) { _log.Write("PDF", "Charts: " + ex.Message); }
+            }
+            else if (charts)
+            {
+                try
+                {
+                    XImage Img(byte[] b)
+                    {
+                        var ms = new MemoryStream();
+                        ms.Write(b, 0, b.Length);
+                        ms.Position = 0;
+                        streams.Add(ms);
+                        return XImage.FromStream(ms);
+                    }
+                    if (kind is "measurements" or "joint")
+                    {
+                        var allMeas = _meas.GetRange(from, to).OrderBy(m => m.TakenAt).ToList();
+                        AddChartPage(doc, page!, Img(ChartImage.Pressure(allMeas)));
+                    }
+                    AddChartPage(doc, page!, Img(ChartImage.WellBeing(_wb.GetRange(from, to).ToList())));
+                }
+                catch (Exception ex) { _log.Write("PDF", "Charts: " + ex.Message); }
+            }
+            var path = Path.Combine(Paths.ReportDir, $"medkontrol_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.pdf");
+            doc.Save(path);
+            return path;
+        }
+        catch (Exception ex) { _log.Write("PDF", ex.Message); throw; }
+        finally { foreach (var s in streams) try { s.Dispose(); } catch { } }
+    }
+}
