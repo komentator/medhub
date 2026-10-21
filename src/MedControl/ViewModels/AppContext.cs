@@ -30,6 +30,7 @@ public sealed class AppServices
     public BackupService Backups { get; }
     public ExcelService Excel { get; }
     public ReportService Reports { get; }
+    public WordReportService WordReports { get; }
     public SyncPeerRepository Peers { get; }
     public SyncService Sync { get; }
     public PhotoService Photos { get; }
@@ -53,6 +54,7 @@ public sealed class AppServices
         Backups = new BackupService(Settings, Log);
         Excel = new ExcelService(Meas, Intakes, Wb, Meds, Log);
         Reports = new ReportService(Meas, Intakes, Wb, Log);
+        WordReports = new WordReportService(Meas, Intakes, Wb, Log);
         Peers = new SyncPeerRepository(Db);
         Sync = new SyncService(Meds, Intakes, Meas, Wb, Peers, Settings, Log);
         Sync.Synced += () => Synced?.Invoke();

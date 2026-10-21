@@ -63,7 +63,7 @@ public sealed class ReportService
         g.DrawImage(img, x, y, w, h);
     }
 
-    public string BuildPdf(DateTime from, DateTime to, bool landscape, int fontSize, string kind, bool charts = true)
+    public string BuildPdf(DateTime from, DateTime to, bool landscape, int fontSize, string kind, bool charts = true, int chartPoints = 0)
     {
         // Потоки картинок живут до конца Save (PdfSharp читает их лениво).
         var streams = new List<MemoryStream>();
@@ -179,8 +179,8 @@ public sealed class ReportService
                     var allMeas = _meas.GetRange(from, to).OrderBy(m => m.TakenAt).ToList();
                     AddCombinedChartsPage(doc,
                         $"MedControl — Графики. Сформировано: {DateTime.Now:yyyy-MM-dd HH:mm}. Период: {from:yyyy-MM-dd} — {to:yyyy-MM-dd}",
-                        Img(ChartImage.Pressure(allMeas)),
-                        Img(ChartImage.WellBeing(_wb.GetRange(from, to).ToList())),
+                        Img(ChartImage.Pressure(allMeas, maxPoints: chartPoints)),
+                        Img(ChartImage.WellBeing(_wb.GetRange(from, to).ToList(), maxPoints: chartPoints)),
                         fontSize);
                 }
                 catch (Exception ex) { _log.Write("PDF", "Charts: " + ex.Message); }
@@ -200,9 +200,9 @@ public sealed class ReportService
                     if (kind is "measurements" or "joint")
                     {
                         var allMeas = _meas.GetRange(from, to).OrderBy(m => m.TakenAt).ToList();
-                        AddChartPage(doc, page!, Img(ChartImage.Pressure(allMeas)));
+                        AddChartPage(doc, page!, Img(ChartImage.Pressure(allMeas, maxPoints: chartPoints)));
                     }
-                    AddChartPage(doc, page!, Img(ChartImage.WellBeing(_wb.GetRange(from, to).ToList())));
+                    AddChartPage(doc, page!, Img(ChartImage.WellBeing(_wb.GetRange(from, to).ToList(), maxPoints: chartPoints)));
                 }
                 catch (Exception ex) { _log.Write("PDF", "Charts: " + ex.Message); }
             }

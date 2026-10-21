@@ -18,9 +18,10 @@ public static class ChartImage
         catch { return SKTypeface.Default; }
     }
 
-    public static byte[] Pressure(List<Measurement> meas, int w = 1100, int h = 420)
+    public static byte[] Pressure(List<Measurement> meas, int w = 1100, int h = 420, int maxPoints = 0)
     {
         var pts = meas.OrderBy(m => m.TakenAt).ToList();
+        if (maxPoints > 0 && pts.Count > maxPoints) pts = pts.Skip(pts.Count - maxPoints).ToList();
         var tonos = pts.Select(m => m.TonometerName).Distinct().OrderBy(n => n).ToList();
         using var bmp = new SKBitmap(w, h);
         using var cv = new SKCanvas(bmp);
@@ -85,9 +86,10 @@ public static class ChartImage
         return Encode(bmp);
     }
 
-    public static byte[] WellBeing(List<WellBeingRating> list, int w = 1100, int h = 300)
+    public static byte[] WellBeing(List<WellBeingRating> list, int w = 1100, int h = 300, int maxPoints = 0)
     {
         var pts = list.OrderBy(x => x.CreatedAt).ToList();
+        if (maxPoints > 0 && pts.Count > maxPoints) pts = pts.Skip(pts.Count - maxPoints).ToList();
         using var bmp = new SKBitmap(w, h);
         using var cv = new SKCanvas(bmp);
         cv.Clear(SKColors.White);

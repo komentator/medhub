@@ -217,6 +217,7 @@
                             <ComboBoxItem Content="Измерения" Tag="measurements" IsSelected="True"/>
                             <ComboBoxItem Content="Приём лекарств" Tag="intakes"/>
                             <ComboBoxItem Content="Совместный отчёт" Tag="joint"/>
+                            <ComboBoxItem Content="Графики" Tag="charts"/>
                         </ComboBox>
                         <ComboBox x:Name="ReportPeriodBox" Width="130" Margin="4" SelectionChanged="OnReportPeriodChanged">
                             <ComboBoxItem Content="30 дней" Tag="30" IsSelected="True"/>
@@ -271,6 +272,11 @@
                         <TextBox x:Name="ExcelCompareBox" Width="420" IsReadOnly="True"/>
                         <Button Content="Выбрать…" Click="OnBrowseCompare"/>
                         <Button Content="Очистить" Click="OnClearCompare"/>
+                    </WrapPanel>
+                    <TextBlock Text="Точек на графике (0 — все):" FontWeight="Bold" Margin="0,8,0,0"/>
+                    <WrapPanel>
+                        <TextBox x:Name="ChartPointsBox" Width="100" ToolTip="Сколько последних точек показывать на графике. 0 — все точки."/>
+                        <Button Content="Сохранить" Click="OnSaveChartPoints"/>
                     </WrapPanel>
                     <CheckBox x:Name="AutostartBox" Content="Запускать MedControl вместе с Windows"/>
                     <WrapPanel>

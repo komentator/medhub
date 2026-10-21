@@ -70,4 +70,6 @@ public sealed class SettingsService
     public string MeasurementInput { get => Get("MeasurementInput", "New"); set => Set("MeasurementInput", value); }
     public string ExcelComparePath { get => Get("ExcelComparePath", ""); set => Set("ExcelComparePath", value); }
     public string LastFileDir { get => Get("LastFileDir", ""); set => Set("LastFileDir", value); }
+    /// <summary>Сколько последних точек показывать на одном графике (0 — все).</summary>
+    public int ChartPoints { get => Math.Max(0, GetInt("ChartPoints", 120)); set => Set("ChartPoints", Math.Max(0, value).ToString()); }
 }
