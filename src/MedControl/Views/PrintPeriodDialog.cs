@@ -63,11 +63,11 @@ public sealed class PrintPeriodDialog : Window
         _points.Text = chartPoints > 0 ? chartPoints.ToString() : "0";
         _points.Width = 90;
         _points.Margin = new Thickness(8, 0, 0, 0);
-        _points.ToolTip = "Сколько последних точек показывать на графике. 0 — все точки.";
+        _points.ToolTip = "Сколько точек помещается на один график. Если в отчёте их больше — он разобьётся на несколько графиков. 0 — все точки на одном.";
         pointsRow.Children.Add(_points);
         pointsRow.Children.Add(new TextBlock
         {
-            Text = "— 0 значит все",
+            Text = "— больше = несколько графиков",
             Margin = new Thickness(10, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
             Foreground = System.Windows.Media.Brushes.Gray

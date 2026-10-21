@@ -35,8 +35,8 @@ public sealed class ReportService
         g.DrawImage(img, 40, 40, maxW, h);
     }
 
-    // Один альбомный лист: шапка + оба графика друг под другом.
-    private static void AddCombinedChartsPage(PdfDocument doc, string header, XImage pressure, XImage wb, int fontSize)
+    // Один альбомный лист: шапка + график(и). Если передан только один — он занимает весь лист.
+    private static void AddCombinedChartsPage(PdfDocument doc, string header, XImage? pressure, XImage? wb, int fontSize)
     {
         var pg = doc.AddPage();
         pg.Size = PdfSharp.PageSize.A4;
@@ -46,9 +46,17 @@ public sealed class ReportService
         g.DrawString(header, hf, XBrushes.Black, XUnit.FromPoint(40), XUnit.FromPoint(36));
         double w = pg.Width.Point - 80;
         double y = 56;
-        double half = (pg.Height.Point - y - 30) / 2;
-        DrawFit(g, pressure, 40, y, w, half - 6);
-        DrawFit(g, wb, 40, y + half, w, half - 6);
+        if (pressure != null && wb != null)
+        {
+            double half = (pg.Height.Point - y - 30) / 2;
+            DrawFit(g, pressure, 40, y, w, half - 6);
+            DrawFit(g, wb, 40, y + half, w, half - 6);
+        }
+        else
+        {
+            var only = pressure ?? wb;
+            if (only != null) DrawFit(g, only, 40, y, w, pg.Height.Point - y - 30);
+        }
     }
 
     private static void DrawFit(XGraphics g, XImage img, double x, double y, double maxW, double maxH)
@@ -164,7 +172,7 @@ public sealed class ReportService
             }
             if (kind == "charts")
             {
-                // Только графики: один альбомный лист (шапка + оба графика).
+                // Только графики: альбомные листы, по одному на часть данных.
                 try
                 {
                     XImage Img(byte[] b)
@@ -177,11 +185,25 @@ public sealed class ReportService
                         return XImage.FromStream(ms);
                     }
                     var allMeas = _meas.GetRange(from, to).OrderBy(m => m.TakenAt).ToList();
-                    AddCombinedChartsPage(doc,
-                        $"MedControl — Графики. Сформировано: {DateTime.Now:yyyy-MM-dd HH:mm}. Период: {from:yyyy-MM-dd} — {to:yyyy-MM-dd}",
-                        Img(ChartImage.Pressure(allMeas, maxPoints: chartPoints)),
-                        Img(ChartImage.WellBeing(_wb.GetRange(from, to).ToList(), maxPoints: chartPoints)),
-                        fontSize);
+                    var allWb = _wb.GetRange(from, to).OrderBy(w => w.CreatedAt).ToList();
+                    var measParts = WordReportService.Chunks(allMeas, chartPoints);
+                    var wbParts = WordReportService.Chunks(allWb, chartPoints);
+
+                    string head = $"MedControl — Графики. Сформировано: {DateTime.Now:yyyy-MM-dd HH:mm}. Период: {from:yyyy-MM-dd} — {to:yyyy-MM-dd}";
+                    int total = measParts.Count + wbParts.Count;
+                    int n = 0;
+                    foreach (var part in measParts)
+                    {
+                        n++;
+                        AddCombinedChartsPage(doc, $"{head}. Давление и пульс — часть {n} из {total}",
+                            Img(ChartImage.Pressure(part)), null!, fontSize);
+                    }
+                    foreach (var part in wbParts)
+                    {
+                        n++;
+                        AddCombinedChartsPage(doc, $"{head}. Самочувствие — часть {n} из {total}",
+                            null!, Img(ChartImage.WellBeing(part)), fontSize);
+                    }
                 }
                 catch (Exception ex) { _log.Write("PDF", "Charts: " + ex.Message); }
             }
@@ -200,9 +222,11 @@ public sealed class ReportService
                     if (kind is "measurements" or "joint")
                     {
                         var allMeas = _meas.GetRange(from, to).OrderBy(m => m.TakenAt).ToList();
-                        AddChartPage(doc, page!, Img(ChartImage.Pressure(allMeas, maxPoints: chartPoints)));
+                        foreach (var part in WordReportService.Chunks(allMeas, chartPoints))
+                            AddChartPage(doc, page!, Img(ChartImage.Pressure(part)));
                     }
-                    AddChartPage(doc, page!, Img(ChartImage.WellBeing(_wb.GetRange(from, to).ToList(), maxPoints: chartPoints)));
+                    foreach (var part in WordReportService.Chunks(_wb.GetRange(from, to).OrderBy(w => w.CreatedAt).ToList(), chartPoints))
+                        AddChartPage(doc, page!, Img(ChartImage.WellBeing(part)));
                 }
                 catch (Exception ex) { _log.Write("PDF", "Charts: " + ex.Message); }
             }

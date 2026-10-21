@@ -145,19 +145,58 @@ public sealed class WordReportTests : IDisposable
     }
 
     [Fact]
-    public void Docx_ChartPoints_Limits_Data()
+    public void Docx_ChartPoints_Splits_Into_Parts()
     {
         var (rep, _) = MakeRepo();
-        // Ограничение точек не должно ломать документ.
+        // 2 измерения по 1 точке → 2 графика давления + 1 график самочувствия.
         string path = rep.BuildDocx(new DateTime(2026, 9, 1), new DateTime(2026, 11, 1), "charts", true, 1);
         try
         {
             using var doc = WordprocessingDocument.Open(path, false);
             var validator = new OpenXmlValidator();
             Assert.Empty(validator.Validate(doc).ToList());
-            Assert.Equal(2, doc.MainDocumentPart!.ImageParts.Count());
+            Assert.Equal(3, doc.MainDocumentPart!.ImageParts.Count());
+
+            var text = string.Concat(doc.MainDocumentPart!.Document.Body!
+                .Descendants<DocumentFormat.OpenXml.Wordprocessing.Text>().Select(t => t.Text));
+            Assert.Contains("часть 1 из 3", text);
+            Assert.Contains("часть 3 из 3", text);
         }
         finally { try { File.Delete(path); } catch { } }
+    }
+
+    [Fact]
+    public void Chunks_Splits_By_Limit()
+    {
+        // 200 точек по 60 → 4 части (60+60+60+20)
+        var list = Enumerable.Range(0, 200).Select(i => i).ToList();
+        var parts = MedControl.Reports.WordReportService.Chunks(list, 60);
+        Assert.Equal(4, parts.Count);
+        Assert.Equal(60, parts[0].Count);
+        Assert.Equal(60, parts[1].Count);
+        Assert.Equal(60, parts[2].Count);
+        Assert.Equal(20, parts[3].Count);
+        // хронология сохраняется
+        Assert.Equal(0, parts[0][0]);
+        Assert.Equal(199, parts[3][^1]);
+    }
+
+    [Fact]
+    public void Chunks_Fewer_Than_Limit_Keeps_All()
+    {
+        var list = Enumerable.Range(0, 25).ToList();
+        var parts = MedControl.Reports.WordReportService.Chunks(list, 60);
+        Assert.Single(parts);
+        Assert.Equal(25, parts[0].Count);
+    }
+
+    [Fact]
+    public void Chunks_Zero_Means_All_In_One()
+    {
+        var list = Enumerable.Range(0, 150).ToList();
+        var parts = MedControl.Reports.WordReportService.Chunks(list, 0);
+        Assert.Single(parts);
+        Assert.Equal(150, parts[0].Count);
     }
 
     [Fact]

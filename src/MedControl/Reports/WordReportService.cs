@@ -322,12 +322,36 @@ public sealed class WordReportService
             {
                 if (!chartsOnly) EndPortraitSection();   // таблицы закончились — дальше альбомная
                 Heading("Графики");
-                string note = chartPoints > 0 ? $" (последние {chartPoints} точек)" : "";
-                Subtitle($"Давление{note}");
-                Picture(ChartImage.Pressure(meas, maxPoints: chartPoints), "Давление и пульс по тонометрам");
-                PageBreak();
-                Subtitle($"Самочувствие{note}");
-                Picture(ChartImage.WellBeing(wbs, maxPoints: chartPoints), "Самочувствие по периоду");
+
+                // Точек больше, чем помещается на один график, — разбиваем на части по chartPoints.
+                var measParts = Chunks(meas, chartPoints);
+                var wbParts = Chunks(wbs, chartPoints);
+                int total = measParts.Count + wbParts.Count;
+                int n = 0;
+
+                foreach (var part in measParts)
+                {
+                    if (n > 0) PageBreak();
+                    n++;
+                    string range = part.Count > 0
+                        ? $"{part[0].TakenAt:dd.MM.yyyy} — {part[^1].TakenAt:dd.MM.yyyy}"
+                        : "";
+                    string cap = PartCaption("Давление и пульс", n, total, range, part.Count);
+                    Subtitle(cap);
+                    Picture(ChartImage.Pressure(part), cap);
+                }
+
+                foreach (var part in wbParts)
+                {
+                    PageBreak();
+                    n++;
+                    string range = part.Count > 0
+                        ? $"{part[0].CreatedAt:dd.MM.yyyy} — {part[^1].CreatedAt:dd.MM.yyyy}"
+                        : "";
+                    string cap = PartCaption("Самочувствие", n, total, range, part.Count);
+                    Subtitle(cap);
+                    Picture(ChartImage.WellBeing(part), cap);
+                }
             }
 
             // ---------- параметры последней секции ----------
@@ -358,6 +382,24 @@ public sealed class WordReportService
             _log.Write("DOCX", ex.Message);
             throw;
         }
+    }
+
+    /// <summary>Режет список на части по size точек (size = 0 — одна часть со всем).</summary>
+    public static List<List<T>> Chunks<T>(List<T> list, int size)
+    {
+        var res = new List<List<T>>();
+        if (list.Count == 0) { res.Add(list); return res; }
+        if (size <= 0) { res.Add(list); return res; }
+        for (int i = 0; i < list.Count; i += size)
+            res.Add(list.GetRange(i, Math.Min(size, list.Count - i)));
+        return res;
+    }
+
+    private static string PartCaption(string title, int index, int total, string range, int count)
+    {
+        string part = total > 1 ? $" — часть {index} из {total}" : "";
+        string dates = string.IsNullOrWhiteSpace(range) ? "" : $" ({range})";
+        return $"{title}{part}{dates} — {count} точек";
     }
 
     private static string UniquePath(string path)

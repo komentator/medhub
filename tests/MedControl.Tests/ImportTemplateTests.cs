@@ -161,12 +161,38 @@ public class ImportTemplateTests : IDisposable
         });
         var rep = new MedControl.Reports.ReportService(meas, new IntakeRepository(db),
             new WellBeingRepository(db), new LogService(db));
-        string path = rep.BuildPdf(new DateTime(2026, 9, 1), new DateTime(2026, 11, 1), false, 11, "charts", true);
+        string path = rep.BuildPdf(new DateTime(2026, 9, 1), new DateTime(2026, 11, 1), false, 11, "charts", true, 60);
         try
         {
             Assert.True(File.Exists(path));
             using var doc = PdfSharp.Pdf.IO.PdfReader.Open(path, PdfSharp.Pdf.IO.PdfDocumentOpenMode.ReadOnly);
-            Assert.Equal(1, doc.PageCount); // один альбомный лист: шапка + оба графика
+            // 1 измерение (1 часть) + 0 записей самочувствия (1 часть) = 2 альбомных листа
+            Assert.Equal(2, doc.PageCount);
+        }
+        finally { try { File.Delete(path); } catch { } }
+    }
+
+    [Fact] public void Pdf_Charts_Split_By_Points()
+    {
+        Directory.CreateDirectory(_dir);
+        var db = new Db(Path.Combine(_dir, "pdf2.db"));
+        var meas = new MeasurementRepository(db);
+        var t = new MedControl.Models.Tonometer { Name = "T" };
+        meas.SaveTonometer(t);
+        for (int i = 0; i < 5; i++)
+            meas.Upsert(new MedControl.Models.Measurement
+            {
+                TonometerId = t.Id, TonometerName = t.Name, TakenAt = new DateTime(2026, 10, 1, 8, 0, 0).AddHours(i),
+                Systolic = 120, Diastolic = 80, Pulse = 70, CreatedAt = new DateTime(2026, 10, 1, 8, 0, 0).AddHours(i),
+            });
+        var rep = new MedControl.Reports.ReportService(meas, new IntakeRepository(db),
+            new WellBeingRepository(db), new LogService(db));
+        // 5 измерений по 2 точки → 3 части давления + 1 часть самочувствия = 4 листа
+        string path = rep.BuildPdf(new DateTime(2026, 9, 1), new DateTime(2026, 11, 1), false, 11, "charts", true, 2);
+        try
+        {
+            using var doc = PdfSharp.Pdf.IO.PdfReader.Open(path, PdfSharp.Pdf.IO.PdfDocumentOpenMode.ReadOnly);
+            Assert.Equal(4, doc.PageCount);
         }
         finally { try { File.Delete(path); } catch { } }
     }
