@@ -36,7 +36,10 @@ public sealed class WordReportService
     private const int UsableWL = PageWL - 2 * MarginX;   // 14570 — графики
     private const long EmuPerTwip = 635;                // 12700 EMU / 20 twips
 
-    public string BuildDocx(DateTime from, DateTime to, string kind, bool charts = true, int chartPoints = 0)
+    /// <summary>Сколько точек помещается на один график. Если в отчёте их больше — он разбивается на несколько графиков.</summary>
+    public const int ChartPointsPerChart = 60;
+
+    public string BuildDocx(DateTime from, DateTime to, string kind, bool charts = true, int chartPoints = ChartPointsPerChart)
     {
         Directory.CreateDirectory(Paths.ReportDir);
         // Имя с миллисекундами: несколько отчётов в одну секунду не должны затирать друг друга.
@@ -150,7 +153,32 @@ public sealed class WordReportService
                 body.Append(new Paragraph(new ParagraphProperties(new SpacingBetweenLines { After = "0" })));
             }
 
-            void Picture(byte[] png, string caption)
+            // Моноширинный текстовый блок: каждый замер — с новой строки, колонки выровнены.
+            void MonoLines(List<string> lines)
+            {
+                foreach (var line in lines)
+                {
+                    body.Append(new Paragraph(
+                        new ParagraphProperties(
+                            new SpacingBetweenLines { After = "0", Line = "200", LineRule = LineSpacingRuleValues.Auto }),
+                        new Run(
+                            new RunProperties(
+                                new RunFonts { Ascii = "Courier New", HighAnsi = "Courier New", ComplexScript = "Courier New" },
+                                new FontSize { Val = "18" },
+                                new FontSizeComplexScript { Val = "18" }),
+                            new Text(line) { Space = SpaceProcessingModeValues.Preserve })));
+                }
+                body.Append(new Paragraph(new ParagraphProperties(new SpacingBetweenLines { After = "60" })));
+            }
+
+            static string Fit(string s, int width)
+            {
+                s = (s ?? "").Replace('\r', ' ').Replace('\n', ' ');
+                if (s.Length > width) s = s.Substring(0, Math.Max(0, width - 1)) + "…";
+                return s.PadRight(width);
+            }
+
+            void Picture(byte[] png, string? caption)
             {
                 if (png == null || png.Length < 24) return;
                 var part = main.AddImagePart(ImagePartType.Png);
@@ -221,26 +249,20 @@ public sealed class WordReportService
                 else
                 {
                     var scores = _wb.GetScoresByMeasurement(meas.Select(r => r.Id));
-                    var rows = new List<string[]>();
+                    // Текстом: каждое измерение — с новой строки.
+                    var lines = new List<string>
+                    {
+                        "Дата       Время   Давление  Пульс  Тонометр     Самочувствие  Комментарий"
+                    };
                     foreach (var m in meas)
                     {
                         string sc = scores.TryGetValue(m.Id, out var s) ? string.Join(",", s) : "—";
-                        rows.Add(new[]
-                        {
-                            m.TakenAt.ToString("dd.MM.yyyy"),
-                            m.TakenAt.ToString("HH:mm"),
-                            m.TonometerName ?? "",
-                            m.Systolic.ToString(),
-                            m.Diastolic.ToString(),
-                            m.Pulse > 0 ? m.Pulse.ToString() : "—",
-                            sc,
-                            string.IsNullOrWhiteSpace(m.Comment) ? "" : m.Comment!,
-                        });
+                        lines.Add(
+                            $"{Fit(m.TakenAt.ToString("dd.MM.yyyy"), 10)} {Fit(m.TakenAt.ToString("HH:mm"), 6)} " +
+                            $"{Fit($"{m.Systolic}/{m.Diastolic}", 9)} {Fit(m.Pulse > 0 ? m.Pulse.ToString() : "—", 6)} " +
+                            $"{Fit(m.TonometerName, 13)} {Fit(sc, 14)} {Fit(m.Comment, 40)}");
                     }
-                    Table(
-                        new[] { "Дата", "Время", "Тонометр", "Верхнее", "Нижнее", "Пульс", "Самочувствие", "Комментарий" },
-                        rows,
-                        new[] { 12, 9, 16, 9, 9, 8, 15, 22 });
+                    MonoLines(lines);
 
                     var valid = meas.Where(m => !(m.Systolic == 0 && m.Diastolic == 0)).ToList();
                     if (valid.Count > 0)
@@ -338,7 +360,7 @@ public sealed class WordReportService
                         : "";
                     string cap = PartCaption("Давление и пульс", n, total, range, part.Count);
                     Subtitle(cap);
-                    Picture(ChartImage.Pressure(part), cap);
+                    Picture(ChartImage.Pressure(part), null);
                 }
 
                 foreach (var part in wbParts)
@@ -350,7 +372,7 @@ public sealed class WordReportService
                         : "";
                     string cap = PartCaption("Самочувствие", n, total, range, part.Count);
                     Subtitle(cap);
-                    Picture(ChartImage.WellBeing(part), cap);
+                    Picture(ChartImage.WellBeing(part), null);
                 }
             }
 

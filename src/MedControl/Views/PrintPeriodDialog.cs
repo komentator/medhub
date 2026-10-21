@@ -19,10 +19,9 @@ public sealed class PrintPeriodDialog : Window
     private readonly System.Windows.Controls.DatePicker _from = new();
     private readonly System.Windows.Controls.DatePicker _to = new();
     private readonly StackPanel _rangeRow = new();
-    private readonly System.Windows.Controls.TextBox _points = new();
-    private (DateTime From, DateTime To, int Points)? _result;
+    private (DateTime From, DateTime To)? _result;
 
-    private PrintPeriodDialog(int chartPoints)
+    private PrintPeriodDialog()
     {
         Title = "Печать — за какой период?";
         Width = 460;
@@ -58,22 +57,6 @@ public sealed class PrintPeriodDialog : Window
         p.Children.Add(_rangeRow);
         PaintDates();
 
-        var pointsRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
-        pointsRow.Children.Add(new TextBlock { Text = "Точек на графике:", VerticalAlignment = VerticalAlignment.Center });
-        _points.Text = chartPoints > 0 ? chartPoints.ToString() : "0";
-        _points.Width = 90;
-        _points.Margin = new Thickness(8, 0, 0, 0);
-        _points.ToolTip = "Сколько точек помещается на один график. Если в отчёте их больше — он разобьётся на несколько графиков. 0 — все точки на одном.";
-        pointsRow.Children.Add(_points);
-        pointsRow.Children.Add(new TextBlock
-        {
-            Text = "— больше = несколько графиков",
-            Margin = new Thickness(10, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            Foreground = System.Windows.Media.Brushes.Gray
-        });
-        p.Children.Add(pointsRow);
-
         var btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
         var ok = new Button { Content = "Создать отчёт", IsDefault = true, Padding = new Thickness(24, 6, 24, 6), Margin = new Thickness(0, 0, 8, 0) };
         ok.Click += (_, _) => Build();
@@ -100,12 +83,7 @@ public sealed class PrintPeriodDialog : Window
             _from.SelectedDate,
             _to.SelectedDate);
         if (to <= from) { Steps.Msg(this, "Дата «по» должна быть позже даты «с»."); return; }
-        if (!int.TryParse(_points.Text.Trim(), out int points) || points < 0)
-        {
-            Steps.Msg(this, "Количество точек должно быть целым числом (0 — все точки).");
-            return;
-        }
-        _result = (from, to, points);
+        _result = (from, to);
         DialogResult = true;
     }
 
@@ -124,9 +102,9 @@ public sealed class PrintPeriodDialog : Window
         };
     }
 
-    public static (DateTime From, DateTime To, int Points)? Show(Window owner, int chartPoints)
+    public static (DateTime From, DateTime To)? Show(Window owner)
     {
-        var w = new PrintPeriodDialog(chartPoints) { Owner = owner };
+        var w = new PrintPeriodDialog { Owner = owner };
         UiTips.Apply(w);
         return w.ShowDialog() == true ? w._result : null;
     }

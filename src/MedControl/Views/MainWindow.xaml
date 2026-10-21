@@ -273,11 +273,6 @@
                         <Button Content="Выбрать…" Click="OnBrowseCompare"/>
                         <Button Content="Очистить" Click="OnClearCompare"/>
                     </WrapPanel>
-                    <TextBlock Text="Точек на графике (0 — все):" FontWeight="Bold" Margin="0,8,0,0"/>
-                    <WrapPanel>
-                        <TextBox x:Name="ChartPointsBox" Width="100" ToolTip="Сколько точек помещается на один график. Если в отчёте их больше — отчёт разобьётся на несколько графиков. 0 — все точки на одном."/>
-                        <Button Content="Сохранить" Click="OnSaveChartPoints"/>
-                    </WrapPanel>
                     <CheckBox x:Name="AutostartBox" Content="Запускать MedControl вместе с Windows"/>
                     <WrapPanel>
                         <Button Content="Проверить напоминание" Click="OnTestReminder"/>

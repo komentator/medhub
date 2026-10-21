@@ -144,6 +144,13 @@ public sealed class WordReportTests : IDisposable
         finally { try { File.Delete(path); } catch { } }
     }
 
+    private static int CountOcc(string text, string part)
+    {
+        int n = 0, i = 0;
+        while ((i = text.IndexOf(part, i, StringComparison.Ordinal)) >= 0) { n++; i += part.Length; }
+        return n;
+    }
+
     [Fact]
     public void Docx_ChartPoints_Splits_Into_Parts()
     {
@@ -161,6 +168,36 @@ public sealed class WordReportTests : IDisposable
                 .Descendants<DocumentFormat.OpenXml.Wordprocessing.Text>().Select(t => t.Text));
             Assert.Contains("часть 1 из 3", text);
             Assert.Contains("часть 3 из 3", text);
+            // подпись части не должна дублироваться
+            Assert.Equal(1, CountOcc(text, "часть 1 из 3"));
+            Assert.Equal(1, CountOcc(text, "часть 2 из 3"));
+            Assert.Equal(1, CountOcc(text, "часть 3 из 3"));
+        }
+        finally { try { File.Delete(path); } catch { } }
+    }
+
+    [Fact]
+    public void Docx_Measurements_Are_Text_Not_Table()
+    {
+        var (rep, _) = MakeRepo();
+        string path = rep.BuildDocx(new DateTime(2026, 9, 1), new DateTime(2026, 11, 1), "measurements", false);
+        try
+        {
+            using var doc = WordprocessingDocument.Open(path, false);
+            var body = doc.MainDocumentPart!.Document.Body!;
+            var text = string.Concat(body.Descendants<DocumentFormat.OpenXml.Wordprocessing.Text>().Select(t => t.Text));
+
+            // Каждое измерение — своей строкой «дата время давление/пульс»
+            Assert.Contains("138/65", text);
+            Assert.Contains("120/80", text);
+            Assert.Contains("Дата", text);
+
+            // Измерения — абзацы, а не строки таблицы: в тексте нет символа-разделителя ячеек
+            var paras = body.Descendants<DocumentFormat.OpenXml.Wordprocessing.Paragraph>()
+                .Where(p => p.Descendants<DocumentFormat.OpenXml.Wordprocessing.Text>()
+                            .Any(t => t.Text.Contains("138/65"))).ToList();
+            Assert.Single(paras);
+            Assert.Null(paras[0].Ancestors<DocumentFormat.OpenXml.Wordprocessing.Table>().FirstOrDefault());
         }
         finally { try { File.Delete(path); } catch { } }
     }

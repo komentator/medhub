@@ -72,7 +72,6 @@ public partial class MainWindow : Window
             if (it is ComboBoxItem ci && ci.Tag?.ToString() == _ctx.Settings.MeasurementInput)
             { MeasureInputBox.SelectedItem = it; break; }
         ExcelCompareBox.Text = _ctx.Settings.ExcelComparePath;
-        ChartPointsBox.Text = _ctx.Settings.ChartPoints.ToString();
         ReportAnchorBox.SelectedDate = DateTime.Now;
         ReportFromBox.SelectedDate = DateTime.Now.AddDays(-30);
         ReportToBox.SelectedDate = DateTime.Now;
@@ -483,16 +482,6 @@ public partial class MainWindow : Window
         if (dlg.ShowDialog(this) == true) { FileDlg.Remember(_ctx, dlg.FileName); ExcelCompareBox.Text = dlg.FileName; }
     }
     private void OnClearCompare(object s, RoutedEventArgs e) => ExcelCompareBox.Text = "";
-    private void OnSaveChartPoints(object s, RoutedEventArgs e)
-    {
-        if (!int.TryParse((ChartPointsBox.Text ?? "").Trim(), out int n) || n < 0)
-        {
-            MessageBox.Show("Количество точек должно быть целым числом (0 — все точки).");
-            return;
-        }
-        _ctx.Settings.ChartPoints = n;
-        ChartPointsBox.Text = n.ToString();
-    }
     private void OnCompareExcel(object s, RoutedEventArgs e)
     {
         var file = _ctx.Settings.ExcelComparePath;
@@ -579,7 +568,7 @@ public partial class MainWindow : Window
         var (from, to) = ReportRange();
         try
         {
-            var path = _ctx.Reports.BuildPdf(from, to, LandscapeBox.IsChecked == true, 11, kind, ChartsBox.IsChecked == true, _ctx.Settings.ChartPoints);
+            var path = _ctx.Reports.BuildPdf(from, to, LandscapeBox.IsChecked == true, 11, kind, ChartsBox.IsChecked == true);
             ReportInfo.Text = "PDF сформирован: " + path;
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
         }
@@ -593,12 +582,11 @@ public partial class MainWindow : Window
     }
     private void OnQuickPrint(object s, RoutedEventArgs e)
     {
-        var res = QuickPrintDialog.Show(this, _ctx.Settings.ChartPoints);
+        var res = QuickPrintDialog.Show(this);
         if (res == null) return;
         try
         {
-            _ctx.Settings.ChartPoints = res.ChartPoints;
-            var path = _ctx.WordReports.BuildDocx(res.From, res.To, res.Kind, true, res.ChartPoints);
+            var path = _ctx.WordReports.BuildDocx(res.From, res.To, res.Kind, true);
             ReportInfo.Text = "Документ Word создан: " + path;
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
         }

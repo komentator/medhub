@@ -71,7 +71,7 @@ public sealed class ReportService
         g.DrawImage(img, x, y, w, h);
     }
 
-    public string BuildPdf(DateTime from, DateTime to, bool landscape, int fontSize, string kind, bool charts = true, int chartPoints = 0)
+    public string BuildPdf(DateTime from, DateTime to, bool landscape, int fontSize, string kind, bool charts = true, int chartPoints = WordReportService.ChartPointsPerChart)
     {
         // Потоки картинок живут до конца Save (PdfSharp читает их лениво).
         var streams = new List<MemoryStream>();
